@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smartbase Administration</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="icon" type="image/svg+xml" href="https://api.iconify.design/mdi/database-cog-outline.svg?color=%2300d4ff">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+.admin-shell{min-height:100vh;background:var(--bg);padding:1.25rem}.admin-wrap{max-width:1500px;margin:auto}.admin-header{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}.admin-title{font-size:1.5rem;font-weight:800;display:flex;align-items:center;gap:.6rem}.admin-logo-img{width:34px;height:34px}.admin-sub{color:var(--text-secondary);font-size:.85rem}.admin-actions{display:flex;gap:.5rem;flex-wrap:wrap}.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1rem;margin:1rem 0}.stat-number{font-size:2rem;font-weight:900}.danger-zone{border-color:rgba(255,68,68,.45)}.danger-text{color:var(--danger)}.table-container{margin-top:1rem}.small{font-size:.75rem;color:var(--text-muted)}.notice{padding:.85rem 1rem;border:1px solid var(--border);border-radius:10px;background:var(--bg-card);color:var(--text-secondary);font-size:.8rem}.section-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:1.75rem}.dataset-form{display:flex;gap:.5rem;flex-wrap:wrap}.dataset-form input{min-width:240px;flex:1}.user-row-selected{background:rgba(255,68,68,.08)}
+</style>
+<link rel="stylesheet" href="/css/external-storage.css">
+</head>
+<body>
+<div class="admin-shell"><div class="admin-wrap">
+  <div class="admin-header">
+    <div><div class="admin-title"><img class="admin-logo-img" src="https://api.iconify.design/mdi/database-cog-outline.svg?color=%2300d4ff" alt="Smartbase"> Smartbase Administration</div><div class="admin-sub" id="adminIdentity">Checking administrator access…</div></div>
+    <div class="admin-actions"><button class="btn" onclick="loadAdmin()">↻ Refresh</button><button class="btn" onclick="location.href='/'">← Platform</button></div>
+  </div>
+  <div id="message" class="notice">Loading protected administration data…</div>
+  <div id="adminContent" class="hidden">
+    <div class="stat-grid" id="stats"></div>
+    <div class="notice"><strong>Location information:</strong> the location shown here is an approximate network location supplied by Cloudflare (city/region/country). It is not GPS and the administration panel does not collect exact device coordinates.</div>
+
+    <div class="section-head"><h2>Registered Accounts</h2><div class="admin-actions"><button class="btn danger-text" onclick="deleteSelected()">Delete Selected</button><button class="btn danger-text" onclick="deleteAll()">Delete All Accounts</button></div></div>
+    <div class="table-container"><table class="data-table"><thead><tr><th><input type="checkbox" id="selectAll" onchange="toggleAll(this.checked)"></th><th>Username</th><th>Email</th><th>Created</th><th>Usage</th><th>Last Activity</th><th>Approx. Location</th><th>Data</th></tr></thead><tbody id="usersBody"></tbody></table></div>
+
+    <div class="section-head"><h2>Usage by Day</h2></div>
+    <div class="table-container"><table class="data-table"><thead><tr><th>Date</th><th>Requests</th><th>Active Users</th></tr></thead><tbody id="daysBody"></tbody></table></div>
+
+    <div class="section-head"><h2>Hugging Face Dataset Catalog</h2></div>
+    <div class="card">
+      <p class="admin-sub" style="margin-bottom:1rem">Add dataset repository IDs that you want to keep available to your administration workflow. Example: <span class="mono">owner/dataset-name</span>. Adding an ID does not automatically change the platform's primary storage dataset.</p>
+      <form class="dataset-form" onsubmit="addDataset(event)"><input id="datasetId" class="form-input" placeholder="owner/dataset-name" required><input id="datasetLabel" class="form-input" placeholder="Optional label"><button class="btn btn-primary">Add Dataset</button></form>
+      <div class="table-container"><table class="data-table"><thead><tr><th>Dataset</th><th>Label</th><th>Added</th><th></th></tr></thead><tbody id="datasetsBody"></tbody></table></div>
+    </div>
+
+    <div class="section-head"><h2 class="danger-text">Danger Zone</h2></div>
+    <div class="card danger-zone"><p>Deleting an account permanently removes its Smartbase databases, tables, records, audit data and API-key records from the configured cloud storage, then removes the account record. The administrator account is protected from bulk deletion.</p></div>
+  </div>
+</div></div>
+<script src="/js/ui.js"></script>
+<script src="/js/admin.js"></script>
+<script src="/js/external-storage.js" defer></script>
+</body>
+</html>

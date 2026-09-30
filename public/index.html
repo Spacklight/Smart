@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="https://quge5.com/88/tag.min.js" data-zone="288483" async data-cfasync="false"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smartbase - SQL-Powered Cloud Database Platform</title>
+<link rel="icon" type="image/svg+xml" href="https://api.iconify.design/mdi/database-cog-outline.svg?color=%2300d4ff">
+<link rel="stylesheet" href="/css/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/external-storage.css">
+</head>
+<body>
+<div id="app">
+  <!-- Landing Page (shown when not authenticated) -->
+  <div id="landingPage" class="landing">
+    <nav class="landing-nav">
+      <div class="logo"><img class="logo-icon-img" src="https://api.iconify.design/mdi/database-cog-outline.svg?color=%2300d4ff" alt="Smartbase"> SMARTBASE</div>
+      <div class="nav-links">
+        <button class="btn theme-toggle" onclick="toggleTheme()" id="landingThemeBtn" aria-label="Switch theme">☀️ Light</button>
+        <button class="btn" onclick="showAuth('login')">Log In</button>
+        <button class="btn btn-primary" onclick="showAuth('register')">Get Started</button>
+      </div>
+    </nav>
+    
+    <div class="hero">
+      <h1>Build and Manage Your Databases<br>Without Managing a Database Server.</h1>
+      <p>Create databases. Design tables. Run SQL. Store your data safely in the cloud.</p>
+      <div class="hero-actions">
+        <button class="btn btn-primary" onclick="showAuth('register')">Get Started — Free</button>
+        <button class="btn" onclick="document.getElementById('features').scrollIntoView()">Explore Features</button>
+      </div>
+      <div style="margin-top:3rem; background: var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:1rem; max-width:700px; width:100%; text-align:left; font-family:'JetBrains Mono', monospace; font-size:0.85rem;">
+        <div style="color: var(--text-muted); margin-bottom:0.5rem;">$ smartbase SQL</div>
+        <div><span style="color: var(--primary);">CREATE DATABASE</span> shop;</div>
+        <div><span style="color: var(--primary);">CREATE TABLE</span> customers (id INTEGER, name TEXT, email TEXT);</div>
+        <div><span style="color: var(--primary);">INSERT INTO</span> customers VALUES (1, 'John Banda', 'john@example.com');</div>
+        <div><span style="color: var(--primary);">SELECT</span> * FROM customers;</div>
+        <div style="color: var(--success); margin-top:0.5rem;">→ 1 row returned • Saved to cloud storage</div>
+      </div>
+    </div>
+
+    <div id="features" class="features">
+      <div class="feature-card"><h3>📝 SQL Editor</h3><p>Modern editor with syntax highlighting, history, and controlled SQL subset. Safe parsing, no OS execution.</p></div>
+      <div class="feature-card"><h3>☁️ Cloud Storage</h3><p>All your data is saved to durable cloud storage and survives restarts.</p></div>
+      <div class="feature-card"><h3>🗄️ Database Management</h3><p>Create up to 20 databases, 50 tables each and 500 tables total on the free plan. Limits are enforced server-side.</p></div>
+      <div class="feature-card"><h3>🔌 REST API</h3><p>Full REST API with read, write and collective API keys, pagination, and structured errors.</p></div>
+      <div class="feature-card"><h3>🔒 Secure</h3><p>Password hashing, user isolation, ownership checks on every request. Secrets are never exposed to the browser.</p></div>
+      <div class="feature-card"><h3>📱 Responsive</h3><p>Works on Android, iPhone, tablets, and desktop. Mobile-friendly SQL editor and tables.</p></div>
+    </div>
+
+    <div style="text-align:center; padding:3rem; border-top:1px solid var(--border); margin-top:2rem;">
+      <p style="color: var(--text-muted);">Free Plan: 20 databases • 50 tables per database • 500 tables total • 500 MB storage • 25 MB max file • 2,000 API requests/day</p>
+    </div>
+  </div>
+
+  <!-- Google/Firebase Authentication Modal -->
+  <div id="authModal" class="modal hidden">
+    <div class="modal-content auth-card">
+      <div class="auth-brand"><img src="https://api.iconify.design/mdi/database-cog-outline.svg?color=%2300d4ff" alt="Smartbase"></div>
+      <h2 id="authTitle">Create Account</h2>
+      <p id="authSubtitle" class="auth-subtitle">Use your Google account to create a secure Smartbase account.</p>
+      <div id="authError" class="auth-error hidden"></div>
+      <label id="termsRow" class="terms-row hidden">
+        <input type="checkbox" id="termsCheckbox">
+        <span>I agree to the <a href="#" onclick="openTerms(event)">Smartbase Terms &amp; Conditions</a>.</span>
+      </label>
+      <button type="button" class="google-auth-btn" onclick="handleGoogleAuth()">
+        <span class="google-mark">G</span><span id="authGoogleText">Continue with Google</span>
+      </button>
+      <p class="auth-trust">Your Google account verifies control of the email address. Smartbase does not use Firebase Firestore or Firebase Storage for your database data.</p>
+      <button class="btn" style="width:100%; margin-top:1rem; justify-content:center;" onclick="hideAuth()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Main App (authenticated) -->
+  <div id="mainApp" class="app hidden">
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo"><img class="logo-icon-img" src="https://api.iconify.design/mdi/database-cog-outline.svg?color=%2300d4ff" alt="Smartbase"> SMARTBASE</div>
+        <div style="font-size:0.7rem; color: var(--text-muted); margin-top:0.25rem;" id="userDisplay">loading...</div>
+      </div>
+      <div class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">Workspace</div>
+          <div class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')"><img class="nav-icon-img" src="https://api.iconify.design/mdi/view-dashboard-outline.svg?color=%2300d4ff" alt=""> Dashboard</div>
+          <div class="nav-item" data-page="databases" onclick="navigate('databases')"><span>🗄️</span> Databases</div>
+          <div class="nav-item" data-page="tables" onclick="navigate('tables')"><img class="nav-icon-img" src="https://api.iconify.design/mdi/table-large.svg?color=%2300d4ff" alt=""> Tables</div>
+          <div class="nav-item" data-page="editor" onclick="navigate('editor')"><span>⌨️</span> SQL Editor</div>
+          <div class="nav-item" data-page="data" onclick="navigate('data')"><span>📁</span> Data Browser</div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">Developer</div>
+          <div class="nav-item" data-page="api" onclick="navigate('api')"><span>🔑</span> API Center</div>
+          <div class="nav-item" data-page="learn" onclick="navigate('learn')"><span>📘</span> Learn Smartbase</div>
+          <div class="nav-item" data-page="experiences" onclick="navigate('experiences')"><span>💬</span> Experiences</div>
+          <div class="nav-item" data-page="settings" onclick="navigate('settings')"><span>⚙️</span> Settings</div>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">Limits</div>
+          <div style="padding:0.5rem;">
+            <div style="font-size:0.75rem; color: var(--text-secondary); margin-bottom:0.25rem;">Databases <span id="dbLimitText">0 / 20</span></div>
+            <div class="progress"><div class="progress-fill" id="dbProgress" style="width:0%"></div></div>
+            <div style="font-size:0.75rem; color: var(--text-secondary); margin:0.75rem 0 0.25rem;">Tables <span id="tableLimitText">0 / 500</span></div>
+            <div class="progress"><div class="progress-fill" id="tableProgress" style="width:0%"></div></div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:1rem; border-top:1px solid var(--border);">
+        <button class="btn" style="width:100%;" onclick="logout()">Logout</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div style="display:flex; align-items:center; gap:1rem;">
+          <button class="mobile-toggle" onclick="toggleSidebar()">☰</button>
+          <h1 id="pageTitle">Dashboard</h1>
+        </div>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          <div style="display:flex;gap:.5rem;align-items:center;">
+            <button class="btn theme-toggle" onclick="toggleTheme()" id="themeBtn" aria-label="Switch theme">☀️ Light</button>
+            <span style="font-size:0.75rem; color: var(--text-muted);" id="storageMode">Cloud: checking…</span>
+          </div>
+          <div style="width:8px; height:8px; background: var(--success); border-radius:50%;"></div>
+        </div>
+      </div>
+
+      <div class="content" id="content">
+        <!-- Dynamic content -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="authLoading" class="auth-loading hidden" aria-live="polite">
+  <div class="auth-loading-card">
+    <div class="spinner"></div>
+    <h3 id="authLoadingTitle">Signing you in…</h3>
+    <p id="authLoadingMessage">Please wait while Smartbase completes authentication.</p>
+  </div>
+</div>
+
+<div id="termsModal" class="modal hidden">
+  <div class="modal-content">
+    <h2>Smartbase Terms &amp; Conditions</h2>
+    <div class="terms-content">
+      <p>By using Smartbase, you agree to use the platform lawfully and responsibly.</p>
+      <p>You are responsible for the data, credentials, API keys and content you store or process through your account.</p>
+      <p>Do not use Smartbase to abuse, attack, overload or interfere with the platform, Hugging Face, Cloudflare, or other services.</p>
+      <p>Smartbase may enforce reasonable storage, file-size and API usage limits to protect service availability.</p>
+      <p>These terms may be updated as Smartbase develops. The version accepted during account creation is recorded with your account.</p>
+    </div>
+    <button class="btn btn-primary" onclick="closeTerms()">Close</button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-auth-compat.js"></script>
+<script src="/js/firebase-auth.js"></script>
+<script src="/js/ui.js"></script>
+<script src="/js/app.js"></script>
+<script src="/js/external-storage.js" defer></script>
+</body>
+</html>

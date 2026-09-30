@@ -1,0 +1,82 @@
+
+#smartbase-storage-launcher{
+  position:fixed;right:20px;bottom:20px;z-index:9998;
+  border:0;border-radius:14px;padding:12px 18px;
+  background:#111827;color:#fff;font:600 14px system-ui;
+  cursor:pointer;box-shadow:0 8px 30px rgba(0,0,0,.22)
+}
+#smartbase-storage-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.55);
+  z-index:9999;display:flex;align-items:center;justify-content:center;
+  padding:18px;font-family:system-ui,-apple-system,sans-serif
+}
+#smartbase-storage-panel{
+  width:min(900px,100%);max-height:92vh;overflow:auto;
+  background:#fff;color:#111827;border-radius:20px;
+  box-shadow:0 20px 70px rgba(0,0,0,.35);padding:24px
+}
+#smartbase-storage-panel *{box-sizing:border-box}
+.smartbase-storage-head{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:15px;margin-bottom:20px
+}
+.smartbase-storage-head h2{margin:0;font-size:23px}
+.smartbase-storage-close{
+  border:0;background:#f3f4f6;border-radius:10px;
+  width:38px;height:38px;font-size:20px;cursor:pointer
+}
+.smartbase-storage-tabs{
+  display:flex;gap:8px;border-bottom:1px solid #e5e7eb;
+  margin-bottom:20px;overflow:auto
+}
+.smartbase-storage-tab{
+  border:0;background:transparent;padding:11px 14px;
+  cursor:pointer;font-weight:600;white-space:nowrap
+}
+.smartbase-storage-tab.active{
+  color:#2563eb;border-bottom:2px solid #2563eb
+}
+.smartbase-storage-card{
+  border:1px solid #e5e7eb;border-radius:15px;padding:16px;
+  margin-bottom:12px;background:#fafafa
+}
+.smartbase-storage-card h3{margin:0 0 7px;font-size:16px}
+.smartbase-storage-muted{color:#6b7280;font-size:13px}
+.smartbase-storage-grid{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px
+}
+.smartbase-storage-field{margin-bottom:13px}
+.smartbase-storage-field label{
+  display:block;font-size:13px;font-weight:600;margin-bottom:6px
+}
+.smartbase-storage-field input,
+.smartbase-storage-field select{
+  width:100%;padding:11px 12px;border:1px solid #d1d5db;
+  border-radius:10px;background:#fff;color:#111827
+}
+.smartbase-storage-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.smartbase-storage-btn{
+  border:0;border-radius:10px;padding:10px 14px;
+  cursor:pointer;font-weight:600
+}
+.smartbase-storage-primary{background:#2563eb;color:white}
+.smartbase-storage-secondary{background:#e5e7eb;color:#111827}
+.smartbase-storage-danger{background:#fee2e2;color:#991b1b}
+.smartbase-storage-success{
+  background:#dcfce7;color:#166534;padding:10px 12px;
+  border-radius:10px;margin-bottom:12px;font-size:13px
+}
+.smartbase-storage-error{
+  background:#fee2e2;color:#991b1b;padding:10px 12px;
+  border-radius:10px;margin-bottom:12px;font-size:13px
+}
+.smartbase-storage-empty{
+  text-align:center;padding:30px;color:#6b7280;
+  border:1px dashed #d1d5db;border-radius:14px
+}
+.smartbase-storage-secret{font-family:monospace}
+@media(max-width:650px){
+  #smartbase-storage-launcher{right:12px;bottom:12px}
+  #smartbase-storage-panel{padding:17px;border-radius:16px}
+  .smartbase-storage-grid{grid-template-columns:1fr}
+}
