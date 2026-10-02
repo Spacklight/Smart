@@ -48,7 +48,15 @@ async function startGoogleAuth() {
 async function handleFirebaseRedirectResult() {
   if (!sessionStorage.getItem('smartbase_google_pending')) return null;
   sessionStorage.removeItem('smartbase_google_pending');
-  const result = await firebaseAuth.getRedirectResult();
+  console.log('[Smartbase Firebase] Checking redirect result...');
+  let result;
+  try {
+    result = await firebaseAuth.getRedirectResult();
+    console.log('[Smartbase Firebase] Redirect result:', result);
+  } catch (error) {
+    console.error('[Smartbase Firebase] Redirect result error:', error);
+    throw error;
+  }
   if (!result || !result.user) return null;
   const termsAccepted = sessionStorage.getItem('smartbase_terms_pending') === '1';
   sessionStorage.removeItem('smartbase_terms_pending');
