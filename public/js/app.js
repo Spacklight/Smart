@@ -46,8 +46,30 @@ function loadMonetization() {
   document.head.appendChild(s);
 }
 
+
+// One-time cleanup for visitors who loaded the site before the fix below and
+// already have the monetization service worker installed. A service worker
+// keeps running for a browser regardless of what today's page contains, so
+// removing the <script> tag does nothing for them on its own - only
+// unregistering it (and reloading once, if it was actively controlling this
+// page) actually clears it. Runs at most once per tab session.
+async function clearStaleServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  if (sessionStorage.getItem('smartbase_sw_cleared') === '1') return;
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    if (!regs.length) { sessionStorage.setItem('smartbase_sw_cleared', '1'); return; }
+    const wasControlled = !!navigator.serviceWorker.controller;
+    await Promise.all(regs.map(r => r.unregister()));
+    sessionStorage.setItem('smartbase_sw_cleared', '1');
+    if (wasControlled) { location.reload(); return true; }
+  } catch (e) { /* best effort - never block sign-in on this */ }
+  return false;
+}
+
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
+  if (await clearStaleServiceWorker()) return; // reloading; this load is done
   try {
     const hadPendingAuth = sessionStorage.getItem('smartbase_google_pending') === '1';
     if (hadPendingAuth) setAuthLoading(true, 'Signing you in…', 'Google authentication is completing. Please wait.');
