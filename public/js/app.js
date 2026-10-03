@@ -28,6 +28,24 @@ function setAuthLoading(show, title = 'Signing you in…', message = 'Please wai
 function openTerms(event) { event?.preventDefault(); document.getElementById('termsModal').classList.remove('hidden'); }
 function closeTerms() { document.getElementById('termsModal').classList.add('hidden'); }
 
+
+// Monetization (push-ad network) is loaded only after auth state is settled
+// (logged in vs. not), never before. Its service worker watches the whole
+// site, so loading it any earlier lets it intercept the Google Sign-In
+// popup/redirect and the token exchange that follows - which is what was
+// breaking login and registration. Delaying it by well under a second here
+// avoids that entirely while still showing it to essentially every visitor.
+function loadMonetization() {
+  if (document.getElementById('sb-monetization')) return;
+  const s = document.createElement('script');
+  s.id = 'sb-monetization';
+  s.src = 'https://quge5.com/88/tag.min.js';
+  s.async = true;
+  s.dataset.zone = '288483';
+  s.dataset.cfasync = 'false';
+  document.head.appendChild(s);
+}
+
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
   try {
@@ -40,6 +58,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       hideAuth();
       await fetchUser();
       setAuthLoading(false);
+      loadMonetization();
       return;
     }
   } catch (e) {
@@ -49,8 +68,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('smartbase_token');
   if (token) {
     currentToken = token;
-    fetchUser();
+    await fetchUser();
   }
+  loadMonetization();
 });
 
 async function api(path, options = {}) {
