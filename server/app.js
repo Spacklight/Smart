@@ -8,8 +8,15 @@ export async function createApp(env = {}) {
   const app = express();
 
   // Same-origin: frontend and API same Cloudflare origin, no wildcard CORS with credentials
-  app.use(express.json({ limit: '2mb' }));
-  app.use(express.urlencoded({ extended: true }));
+  // 2 MB for normal API bodies. File endpoints are special: JSON uploads may carry a base64 file (up to ~7 MB),
+  // and PUT /files/:name is a raw body parsed by its own route.
+  const jsonSmall = express.json({ limit: '2mb' }), jsonFiles = express.json({ limit: '11mb' }), form = express.urlencoded({ extended: true });
+  app.use((req, res, next) => {
+    if (req.method === 'PUT' && /\/files\/[^/]+$/.test(req.path)) return next();
+    if (req.method === 'POST' && /\/files\/?$/.test(req.path)) return jsonFiles(req, res, next);
+    return jsonSmall(req, res, next);
+  });
+  app.use((req, res, next) => (req.method === 'PUT' && /\/files\/[^/]+$/.test(req.path) ? next() : form(req, res, next)));
   app.use(cookieParser());
 
   // /apiv1 is authenticated by API key (never by cookie), so it is safe to let

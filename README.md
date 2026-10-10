@@ -24,7 +24,8 @@ Hugging Face Dataset Storage (or Local Mock)
 
 - **5 databases** per free account, **10 tables** per database (enforced server-side)
 - **Hugging Face persistence** - all data survives restarts
-- **Controlled SQL**: CREATE/SHOW/DROP DATABASE, CREATE/SHOW/DROP TABLE, INSERT, SELECT (with WHERE, ORDER BY, LIMIT), UPDATE, DELETE
+- **SQL engine (tastdone)**: multi-statement scripts, CREATE/ALTER/DROP TABLE, views and indexes, INSERT (multi-row, INSERT...SELECT, ON DUPLICATE KEY UPDATE), UPDATE/DELETE with expressions, SELECT with all JOINs, GROUP BY/HAVING, subqueries, WITH (recursive), UNION/INTERSECT/EXCEPT, CASE/CAST, 60+ functions, PRIMARY KEY/UNIQUE/NOT NULL/DEFAULT/CHECK/AUTO_INCREMENT, BEGIN/COMMIT/ROLLBACK. Platform statements CREATE/SHOW/DROP DATABASE still work.
+- **Files**: per-account file storage (up to 7 MB per file, 500 MB per account) usable from the dashboard and with API keys (`/apiv1/files`).
 - **Supported Types**: INTEGER, FLOAT, TEXT, BOOLEAN, DATE, DATETIME, JSON
 - **User Isolation**: Every request verifies ownership - User A cannot access User B
 - **REST API**: Full CRUD + SQL endpoint
@@ -203,4 +204,14 @@ Google authentication requires the production Smartbase domain to be listed in F
 - API-key traffic is rate-limited to 20 requests/minute and 2,000 requests/day per user within each running application instance.
 
 ### File-storage note
-The current Smartbase core is dataset/database focused and does not yet expose a production binary-file upload endpoint. The 500 MB storage and 25 MB per-file values are the product policy for the file-storage feature; they should be enforced by the future file-storage endpoint. Binary files should not be stored as large Base64 database fields in production.
+Files are available at `/api/v1/files` (browser session) and `/apiv1/files` (API key): `GET /files`, `GET /files/:name`, `PUT /files/:name` (raw bytes), `POST /files` (JSON with base64 `data`), `DELETE /files/:name`, `GET /usage`. Read keys can list/download; write keys can upload/delete.
+
+Hugging Face rejects raw binary files in plain commits, so each file is stored as a JSON document holding the bytes as base64 (`users/<id>/files/<name>.json`). That limits a file to about 7 MB. The 25 MB per-file target needs a different backend (Hugging Face Xet/LFS upload, or the Backblaze B2 connections already in Smartbase); this is intentionally not used here for large files. `FILE_QUOTA_BYTES` (default 500 MB) sets the per-account quota.
+
+### SQL engine notes (tastdone merge)
+- `server/sql/engine.js` is the pure-JS engine; `server/sql/executor.js` bridges it to the existing Hugging Face layout (`tables.json`, table `metadata.json`, `records.json`), so dashboard tables, the Data Browser and the REST record endpoints keep working on the same data.
+- Only tables mentioned in the SQL are loaded; only changed tables are written back. A script is atomic: if any statement fails, nothing is saved.
+- Records inserted by SQL get an `id` (for the record REST endpoints) unless the table declares its own `id` column.
+- Views, indexes and engine metadata (keys, defaults, auto-increment) are stored in the database/table metadata.
+- API keys: a script that only reads (SELECT/SHOW) needs a read key; anything else needs a write key.
+- Tests: `node test/merge.test.mjs` (no network needed).

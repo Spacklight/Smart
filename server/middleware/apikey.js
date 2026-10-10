@@ -1,6 +1,5 @@
-import { sqlParser } from '../sql/parser.js';
+import { classifySQLPermission } from '../sql/executor.js';
 
-const READ_OPERATIONS = new Set(['SELECT', 'SHOW_DATABASES', 'SHOW_TABLES']);
 const MAX_REQUESTS_PER_MINUTE = 20;
 const MAX_REQUESTS_PER_DAY = 2000;
 const usage = new Map();
@@ -37,13 +36,7 @@ export function createApiKeyMiddleware({ apiKeys }) {
     if (req.method === 'POST' && req.path === '/query') {
       const { database_id, sql } = req.body || {};
       if (typeof sql === 'string') {
-        try {
-          const op = sqlParser.parse(sql, { database_id }).operation;
-          return READ_OPERATIONS.has(op) ? 'read' : 'write';
-        } catch {
-          // Unparseable SQL is rejected by the query route itself.
-          return 'read';
-        }
+        return classifySQLPermission(sql);
       }
       return 'read';
     }

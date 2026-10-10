@@ -222,6 +222,7 @@ function navigate(page) {
     tables: 'Tables',
     editor: 'SQL Editor',
     data: 'Data Browser',
+    files: 'Files',
     api: 'API Center',
     learn: 'Learn Smartbase',
     experiences: 'Community Experiences',
@@ -235,6 +236,7 @@ function navigate(page) {
     case 'tables': renderTables(); break;
     case 'editor': renderEditor(); break;
     case 'data': renderDataBrowser(); break;
+    case 'files': renderFiles(); break;
     case 'api': renderAPI(); break;
     case 'learn': renderLearn(); break;
     case 'experiences': renderExperiences(); break;
@@ -663,6 +665,8 @@ async function renderEditor() {
       <button class="btn" onclick="insertTemplate('SHOW TABLES;')">SHOW TABLES</button>
       <button class="btn" onclick="insertTemplate('SELECT * FROM customers;')">SELECT *</button>
       <button class="btn" onclick="insertTemplate('SELECT * FROM customers WHERE age > 25 LIMIT 10;')">SELECT WHERE</button>
+      <button class="btn" onclick="insertTemplate('SELECT c.name, COUNT(o.id) AS orders, SUM(o.total) AS spent FROM customers c LEFT JOIN orders o ON o.customer_id = c.id GROUP BY c.name ORDER BY spent DESC;')">JOIN + GROUP BY</button>
+      <button class="btn" onclick="insertTemplate('CREATE TABLE orders (id INTEGER PRIMARY KEY AUTO_INCREMENT, customer_id INT, total DECIMAL(10,2), status TEXT, created TEXT DEFAULT CURRENT_TIMESTAMP);')">CREATE TABLE (keys)</button>
     </div>
 
     <div id="sqlResult" class="result-box hidden"></div>
@@ -777,6 +781,70 @@ function escapeHtml(v) {
   return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 }
 
+
+function fmtBytes(n) { const u = ['B','KB','MB','GB']; let i = 0; n = Number(n) || 0; while (n >= 1024 && i < 3) { n /= 1024; i++; } return n.toFixed(i ? 2 : 0) + ' ' + u[i]; }
+
+async function renderFiles() {
+  const content = document.getElementById('content');
+  content.innerHTML = `<div>Loading...</div>`;
+  try {
+    const data = await api('/files');
+    const u = data.usage, pct = u.quota ? Math.min(100, (u.used / u.quota) * 100) : 0;
+    const color = pct > 95 ? 'var(--error, #ef4444)' : pct > 80 ? 'var(--warning, #f59e0b)' : 'var(--accent, #00d4ff)';
+    content.innerHTML = `
+      <h2>📎 Files</h2>
+      <p style="color:var(--text-secondary);margin:.5rem 0 1.5rem;">Store files (images, PDFs, documents) and use them from your own apps with an API key. Upload with a write key, download and list with a read key.</p>
+      <div class="card" style="margin-bottom:1.25rem;">
+        <div class="card-header"><span class="card-title">File storage</span><span class="badge">Free plan</span></div>
+        <div style="margin-top:.75rem;font-size:.9rem;">${fmtBytes(u.used)} used of ${fmtBytes(u.quota)} (${fmtBytes(u.remaining)} left) • max ${fmtBytes(u.max_file_bytes)} per file</div>
+        <div style="height:8px;background:var(--bg-secondary);border-radius:6px;overflow:hidden;margin-top:.6rem;"><div style="height:100%;width:${Math.max(pct, u.used ? 1 : 0)}%;background:${color};"></div></div>
+      </div>
+      <div class="card" style="margin-bottom:1.25rem;">
+        <h3>Upload a file</h3>
+        <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1rem;align-items:center;">
+          <input id="fileInput" type="file" class="form-input" style="flex:1;min-width:220px;">
+          <button class="btn btn-primary" id="fileUploadBtn" onclick="uploadFile()">Upload</button>
+        </div>
+      </div>
+      <div class="table-container"><table class="data-table"><thead><tr><th>Name</th><th>Size</th><th>Type</th><th>Uploaded</th><th>Actions</th></tr></thead><tbody>
+        ${data.files.length ? data.files.map(f => `<tr><td class="mono">${escapeHtml(f.name)}</td><td>${fmtBytes(f.size)}</td><td>${escapeHtml(f.content_type || '')}</td><td>${escapeHtml((f.created_at || '').slice(0, 10))}</td>
+          <td><button class="btn" style="padding:.25rem .5rem;font-size:.75rem;" data-name="${escapeHtml(f.name)}" onclick="downloadFile(this.dataset.name)">Download</button>
+          <button class="btn" style="padding:.25rem .5rem;font-size:.75rem;" data-name="${escapeHtml(f.name)}" onclick="deleteFile(this.dataset.name)">Delete</button></td></tr>`).join('')
+          : `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">No files yet.</td></tr>`}
+      </tbody></table></div>`;
+  } catch (e) {
+    content.innerHTML = `<div class="card"><h3>Could not load files</h3><p class="muted-copy">${escapeHtml(e.message || 'Please try again.')}</p></div>`;
+  }
+}
+
+async function uploadFile() {
+  const input = document.getElementById('fileInput'), file = input && input.files[0];
+  if (!file) return showToast('Choose a file first.', 'warning');
+  if (file.size > 7 * 1024 * 1024) return showToast('File too large (max 7 MB per file).', 'warning');
+  const btn = document.getElementById('fileUploadBtn'); btn.disabled = true; btn.textContent = 'Uploading...';
+  try {
+    const b64 = await new Promise((resolve, reject) => { const r = new FileReader(); r.onerror = () => reject(new Error('Could not read the file.')); r.onload = () => resolve(String(r.result).split(',')[1] || ''); r.readAsDataURL(file); });
+    await api('/files', { method: 'POST', body: JSON.stringify({ name: file.name, data: b64, content_type: file.type || 'application/octet-stream' }) });
+    showToast('File uploaded.', 'success'); renderFiles();
+  } catch (e) { showToast(e.message || 'Upload failed.', 'error'); btn.disabled = false; btn.textContent = 'Upload'; }
+}
+
+async function downloadFile(name) {
+  try {
+    const res = await fetch(`/api/v1/files/${encodeURIComponent(name)}`, { headers: { Authorization: `Bearer ${currentToken}` } });
+    if (!res.ok) throw new Error('Download failed.');
+    const blob = await res.blob(), a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  } catch (e) { showToast(e.message || 'Download failed.', 'error'); }
+}
+
+async function deleteFile(name) {
+  const ok = await showConfirm(`Delete '${name}' permanently?`, { title: 'Delete file', confirmText: 'Delete' });
+  if (!ok) return;
+  try { await api(`/files/${encodeURIComponent(name)}`, { method: 'DELETE' }); showToast('File deleted.', 'success'); renderFiles(); }
+  catch (e) { showToast(e.message || 'Delete failed.', 'error'); }
+}
+
 function apiBaseUrl() { return `${location.origin}/apiv1`; }
 
 async function copyText(text, btn) {
@@ -811,6 +879,8 @@ async function renderAPI() {
         <div><strong>20</strong><div class="muted-copy">API requests/minute</div></div>
         <div><strong>5</strong><div class="muted-copy">API keys/account</div></div>
         <div><strong>2 MB</strong><div class="muted-copy">API request body</div></div>
+        <div><strong>7 MB</strong><div class="muted-copy">per uploaded file</div></div>
+        <div><strong>500 MB</strong><div class="muted-copy">file storage/account</div></div>
       </div>
     </div>
     <div class="card" style="margin-bottom:1.25rem;">
@@ -855,6 +925,11 @@ curl ${escapeHtml(base)}/databases \
         <div><span class="badge">POST</span> <code>/databases/:id/tables</code> — create a table</div>
         <div><span class="badge">POST</span> <code>/databases/:id/tables/:tableId/records</code> — insert records</div>
         <div><span class="badge">PUT / DELETE</span> <code>/databases/...</code> — update or remove resources</div>
+        <div><span class="badge badge-success">GET</span> <code>/files</code> — list files and storage usage (read key)</div>
+        <div><span class="badge badge-success">GET</span> <code>/files/:name</code> — download a file (read key)</div>
+        <div><span class="badge">PUT</span> <code>/files/:name</code> — upload raw file bytes (write key)</div>
+        <div><span class="badge">POST</span> <code>/files</code> — upload JSON with base64 data (write key)</div>
+        <div><span class="badge">DELETE</span> <code>/files/:name</code> — delete a file (write key)</div>
         <div><span class="badge">POST</span> <code>/query</code> — INSERT/UPDATE/DELETE/CREATE/DROP with a write key</div>
       </div>
     </div>
@@ -874,6 +949,26 @@ console.log(result);</pre>
   -H "Content-Type: application/json" \
   -d '{"database_id":"sb_db_xxx","sql":"SELECT * FROM customers"}'</pre>
       <p class="muted-copy" style="margin-top:.75rem;">Responses are JSON. Errors include a structured <code>error</code> code and human-readable <code>message</code>.</p>
+    </div>
+    <div class="card" style="margin-top:1.25rem;">
+      <h3>Files through the API</h3>
+      <pre class="code-block"># upload (write key) - send the file bytes as the body
+curl -X PUT ${escapeHtml(base)}/files/photo.jpg \
+  -H "Authorization: Bearer YOUR_WRITE_KEY" \
+  -H "Content-Type: image/jpeg" \
+  --data-binary @photo.jpg
+
+# list (read key)
+curl ${escapeHtml(base)}/files -H "Authorization: Bearer YOUR_READ_KEY"
+
+# download (read key)
+curl -o photo.jpg ${escapeHtml(base)}/files/photo.jpg \
+  -H "Authorization: Bearer YOUR_READ_KEY"</pre>
+      <p class="muted-copy" style="margin-top:.75rem;">Files up to 7 MB each, 500 MB per account. Uploads and downloads count toward your API request limits.</p>
+    </div>
+    <div class="card" style="margin-top:1.25rem;">
+      <h3>Advanced SQL</h3>
+      <p class="muted-copy">The SQL endpoint supports multi-row <code>INSERT</code>, <code>UPDATE</code>/<code>DELETE</code> with expressions, <code>JOIN</code> (inner, left, right, full), <code>GROUP BY</code>/<code>HAVING</code>, subqueries, <code>WITH</code> (including recursive), <code>UNION</code>, <code>CASE</code>, <code>ALTER TABLE</code>, views, indexes, <code>PRIMARY KEY</code>/<code>UNIQUE</code>/<code>NOT NULL</code>/<code>DEFAULT</code>/<code>CHECK</code> constraints and <code>BEGIN</code>/<code>COMMIT</code>/<code>ROLLBACK</code>. You can send several statements separated by <code>;</code> — if one fails, none of them are saved. A script that only reads needs a read key; anything else needs a write key.</p>
     </div>
     <div class="card" style="margin-top:1.25rem;">
       <h3>Security checklist</h3>

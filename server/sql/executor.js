@@ -1,207 +1,134 @@
-import { getStorageAdapter, createStorageAdapter } from '../storage/adapter.js';
-import { generateId as generateIdOld } from '../auth/auth.js';
-import { sqlParser } from './parser.js';
+// Bridge between the Smartbase storage layout (Hugging Face: tables.json / metadata.json / records.json)
+// and the tastdone SQL engine. Same export as before: executeSQL(userId, databaseId, sql, { storage, authModule }).
+import { run, classifyStatements, identifiersIn } from './engine.js';
 
-let storageInstance = null;
-let storageConfigKey = null;
+const DB_LIMIT = 20, TABLE_LIMIT = 50, TOTAL_TABLE_LIMIT = 500, MAX_ROWS = 5000;
+const SHOW_DB = /^\s*SHOW\s+DATABASES\s*;?\s*$/i;
+const CREATE_DB = /^\s*CREATE\s+DATABASE\s+(IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*;?\s*$/i;
+const DROP_DB = /^\s*DROP\s+DATABASE\s+(IF\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*;?\s*$/i;
+const NAME_OK = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
-function getStorage() {
-  try {
-    const token = typeof process !== 'undefined' && process.env ? process.env.HF_TOKEN : '';
-    const dataset = typeof process !== 'undefined' && process.env ? process.env.HF_DATASET : '';
-    const isProduction = typeof process !== 'undefined' && process.env ? process.env.NODE_ENV === 'production' : false;
-    const key = `${token}|${dataset}|${isProduction}`;
-    if (!storageInstance || storageConfigKey !== key) {
-      if (token && dataset) storageInstance = createStorageAdapter({ token, dataset, isProduction });
-      else storageInstance = getStorageAdapter();
-      storageConfigKey = key;
+/** 'read' | 'write' - used by the API-key middleware (read keys may only read). */
+export function classifySQLPermission(sql) {
+  if (SHOW_DB.test(sql)) return 'read';
+  if (/^\s*(CREATE|DROP|ALTER)\s+(DATABASE|SCHEMA)\b/i.test(sql)) return 'write';
+  try { return classifyStatements(sql); } catch { return 'read'; } // syntax errors are rejected by the query route itself
+}
+
+function mapType(t) {
+  t = String(t || '').toUpperCase();
+  if (/INT/.test(t)) return 'INTEGER';
+  if (/REAL|FLOA|DOUB|DEC|NUM/.test(t)) return 'FLOAT';
+  if (/BOOL/.test(t)) return 'BOOLEAN';
+  if (/TIMESTAMP|DATETIME/.test(t)) return 'DATETIME';
+  if (/^DATE/.test(t)) return 'DATE';
+  if (/JSON/.test(t)) return 'JSON';
+  return 'TEXT';
+}
+const legacyCols = (t) => t.cols.map((c) => ({ name: c.key, type: mapType(c.type), nullable: !c.notnull, sql_type: c.type || undefined }));
+const engineDef = (t) => ({ cols: t.cols, pk: t.pk, uniques: t.uniques, checks: t.checks || [], ai: t.ai || 0 });
+const colFromLegacy = (m) => ({ name: m.name, key: m.name, type: m.sql_type || m.type, notnull: m.nullable === false });
+
+function toEngineTable(meta, rows, loaded) {
+  const e = meta.engine, legacy = meta.columns || [];
+  let cols;
+  if (e && Array.isArray(e.cols)) {
+    cols = e.cols.filter((c) => legacy.some((m) => m.name === c.key)).map((c) => ({ ...c }));
+    for (const m of legacy) if (!cols.some((c) => c.key === m.name)) cols.push(colFromLegacy(m));
+  } else cols = legacy.map(colFromLegacy);
+  const keys = new Set(cols.map((c) => c.key));
+  return { name: meta.name, cols, pk: ((e && e.pk) || []).filter((k) => keys.has(k)), uniques: ((e && e.uniques) || []).filter((u) => u.keys.every((k) => keys.has(k))), checks: (e && e.checks) || [], ai: (e && e.ai) || 0, rows, _meta: meta, _loaded: loaded };
+}
+
+async function loadState(storage, userId, dbId, dbMeta, sql) {
+  const list = (await storage.hf.readFile(storage.databaseTablesPath(userId, dbId))) || [];
+  const eng = dbMeta.engine || {};
+  const views = JSON.parse(JSON.stringify(eng.views || {})), indexes = JSON.parse(JSON.stringify(eng.indexes || {}));
+  const wanted = new Set(identifiersIn(sql));
+  for (let grew = true; grew;) { grew = false; for (const [name, v] of Object.entries(views)) if (wanted.has(name)) for (const id of identifiersIn(v.sql)) if (!wanted.has(id)) { wanted.add(id); grew = true; } }
+  const db = { tables: {}, views, indexes }, originals = [];
+  for (const entry of list) {
+    const meta = await storage.getTable(userId, dbId, entry.id); if (!meta) continue;
+    const need = wanted.has(meta.name.toLowerCase());
+    const rows = need ? (await storage.getRecords(userId, dbId, meta.id)).map((r) => ({ ...r })) : [];
+    const t = toEngineTable(meta, rows, need);
+    db.tables[meta.name.toLowerCase()] = t; originals.push(t);
+  }
+  const snaps = {}; for (const t of originals) snaps[t._meta.id] = { rows: t._loaded ? JSON.stringify(t.rows) : null, def: JSON.stringify(engineDef(t)), name: t._meta.name };
+  return { db, originals, snaps, viewState: JSON.stringify([views, indexes]) };
+}
+
+async function persist(storage, authModule, userId, dbId, st) {
+  const { db, originals, snaps } = st, now = new Date().toISOString(), tables = Object.values(db.tables);
+  for (const t of tables) { // keep records addressable by id for the REST endpoints
+    if (t._meta && !t._loaded) continue;
+    if (t.cols.some((c) => c.key === 'id')) continue;
+    for (const r of t.rows) if (r.id == null) { r.id = authModule.generateId('sb_rec'); r._created_at = now; }
+  }
+  const fresh = tables.filter((t) => !t._meta);
+  for (const t of fresh) if (!NAME_OK.test(t.name) || t.name.length > 64) throw { code: 'INVALID_SQL', message: 'Table name must start with a letter/underscore, use letters, numbers and underscores only (max 64).' };
+  if (fresh.length) {
+    if (tables.length > TABLE_LIMIT) throw { code: 'TABLE_LIMIT_REACHED', message: `Free accounts can create a maximum of ${TABLE_LIMIT} tables per database.` };
+    let total = 0; for (const d of await storage.getUserDatabases(userId)) total += d.id === dbId ? tables.length : ((await storage.hf.readFile(storage.databaseTablesPath(userId, d.id))) || []).length;
+    if (total > TOTAL_TABLE_LIMIT) throw { code: 'TOTAL_TABLE_LIMIT_REACHED', message: `Free accounts can create a maximum of ${TOTAL_TABLE_LIMIT} tables in total.` };
+  }
+  const kept = new Set(tables.filter((t) => t._meta).map((t) => t._meta.id));
+  for (const o of originals) if (!kept.has(o._meta.id)) await storage.deleteTable(userId, dbId, o._meta.id);
+  for (const t of fresh) {
+    const meta = { id: authModule.generateId('sb_tbl'), database_id: dbId, name: t.name.toLowerCase(), columns: legacyCols(t), engine: engineDef(t), created_at: now, updated_at: now };
+    await storage.createTable(userId, dbId, meta);
+    if (t.rows.length) await storage.setRecords(userId, dbId, meta.id, t.rows);
+  }
+  for (const t of tables.filter((x) => x._meta)) {
+    const s = snaps[t._meta.id], def = JSON.stringify(engineDef(t));
+    if (def !== s.def || t.name !== s.name) {
+      await storage.updateTable(userId, dbId, t._meta.id, { name: t.name.toLowerCase(), columns: legacyCols(t), engine: engineDef(t) });
+      if (t.name !== s.name) await storage.renameTableInList(userId, dbId, t._meta.id, t.name.toLowerCase());
     }
-  } catch { storageInstance = getStorageAdapter(); }
-  return storageInstance;
+    if (t._loaded && JSON.stringify(t.rows) !== s.rows) await storage.setRecords(userId, dbId, t._meta.id, t.rows);
+  }
+  if (JSON.stringify([db.views, db.indexes]) !== st.viewState) await storage.setDatabaseEngineState(userId, dbId, { views: db.views, indexes: db.indexes });
 }
 
-export function setStorageForTesting(storage) { storageInstance = storage; }
-function getGenerateId() { return generateIdOld; }
-
-function validateType(value, type) {
-  if (value === null || value === undefined) return true;
-  switch (type) {
-    case 'INTEGER': return Number.isInteger(Number(value)) || (typeof value === 'string' && /^\d+$/.test(value));
-    case 'FLOAT': return !isNaN(Number(value));
-    case 'TEXT': return typeof value === 'string' || typeof value === 'number';
-    case 'BOOLEAN': return typeof value === 'boolean' || value === 'true' || value === 'false' || value === 1 || value === 0;
-    case 'DATE': return !isNaN(Date.parse(value));
-    case 'DATETIME': return !isNaN(Date.parse(value));
-    case 'JSON': try { if (typeof value === 'object') return true; JSON.parse(value); return true; } catch { return false; }
-    default: return true;
-  }
-}
-function coerceValue(value, type) {
-  if (value === null) return null;
-  switch (type) {
-    case 'INTEGER': return parseInt(value);
-    case 'FLOAT': return parseFloat(value);
-    case 'BOOLEAN': return value === true || value === 'true' || value === 1;
-    default: return value;
-  }
-}
-
-export async function executeSQL(userId, databaseId, sql, options = {}) {
-  const storage = options.storage || getStorage();
-  const start = Date.now();
-  try {
-    const command = sqlParser.parse(sql, { database_id: databaseId });
-    if (databaseId) {
-      const db = await storage.getDatabase(userId, databaseId);
-      if (!db) throw { code: 'DATABASE_NOT_FOUND', message: 'Database not found or access denied' };
-      if (db.owner_id && db.owner_id !== userId) throw { code: 'DATABASE_NOT_FOUND', message: 'Database not found' };
-    }
-    let result;
-    switch (command.operation) {
-      case 'CREATE_DATABASE': result = await execCreateDatabase(userId, command, storage); break;
-      case 'SHOW_DATABASES': result = await execShowDatabases(userId, storage); break;
-      case 'DROP_DATABASE': result = await execDropDatabase(userId, command, storage); break;
-      case 'CREATE_TABLE': result = await execCreateTable(userId, databaseId, command, storage); break;
-      case 'SHOW_TABLES': result = await execShowTables(userId, databaseId, storage); break;
-      case 'DROP_TABLE': result = await execDropTable(userId, databaseId, command, storage); break;
-      case 'INSERT': result = await execInsert(userId, databaseId, command, storage); break;
-      case 'SELECT': result = await execSelect(userId, databaseId, command, storage); break;
-      case 'UPDATE': result = await execUpdate(userId, databaseId, command, storage); break;
-      case 'DELETE': result = await execDelete(userId, databaseId, command, storage); break;
-      default: throw { code: 'UNSUPPORTED_SQL', message: `Operation ${command.operation} not supported` };
-    }
-    const duration = Date.now() - start;
-    await storage.addAudit(userId, { operation: command.operation, database_id: databaseId, sql: sql.substring(0, 200), success: true, duration });
-    return { success: true, ...result, execution_time: duration };
-  } catch (e) { if (e.code) throw e; throw { code: 'SQL_EXECUTION_ERROR', message: e.message || 'SQL execution failed' }; }
-}
-
-async function execCreateDatabase(userId, command, storage) {
-  const databases = await storage.getUserDatabases(userId);
-  if (databases.length >= 20) throw { code: 'DATABASE_LIMIT_REACHED', message: 'Free accounts can create a maximum of 20 databases.' };
-  const exists = databases.find(d => d.name === command.name);
-  if (exists) throw { code: 'DUPLICATE_DATABASE', message: `Database '${command.name}' already exists` };
-  const dbData = { id: getGenerateId()('sb_db'), name: command.name, description: command.description || '', owner_id: userId, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), status: 'active' };
-  await storage.createDatabase(userId, dbData);
-  return { message: `Database '${command.name}' created`, database: dbData };
-}
-async function execShowDatabases(userId, storage) { const databases = await storage.getUserDatabases(userId); return { rows: databases, count: databases.length }; }
-async function execDropDatabase(userId, command, storage) {
-  const databases = await storage.getUserDatabases(userId);
-  const db = databases.find(d => d.name === command.name);
-  if (!db) throw { code: 'DATABASE_NOT_FOUND', message: `Database '${command.name}' not found` };
-  await storage.deleteDatabase(userId, db.id);
-  return { message: `Database '${command.name}' deleted` };
-}
-async function execCreateTable(userId, databaseId, command, storage) {
-  if (!databaseId) throw { code: 'DATABASE_NOT_FOUND', message: 'Database ID required' };
-  const tables = await storage.getDatabaseTables(userId, databaseId);
-  if (tables.length >= 50) throw { code: 'TABLE_LIMIT_REACHED', message: 'Free accounts can create a maximum of 50 tables per database.' };
-  const allDatabases = await storage.getUserDatabases(userId);
-  let totalTables = 0;
-  for (const db of allDatabases) totalTables += (await storage.getDatabaseTables(userId, db.id)).length;
-  if (totalTables >= 500) throw { code: 'TOTAL_TABLE_LIMIT_REACHED', message: 'Free accounts can create a maximum of 500 tables in total.' };
-  const exists = tables.find(t => t.name === command.table.name);
-  if (exists) throw { code: 'DUPLICATE_TABLE', message: `Table '${command.table.name}' already exists` };
-  const tableData = { id: getGenerateId()('sb_tbl'), database_id: databaseId, name: command.table.name, columns: command.table.columns, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-  await storage.createTable(userId, databaseId, tableData);
-  return { message: `Table '${command.table.name}' created`, table: tableData };
-}
-async function execShowTables(userId, databaseId, storage) { const tables = await storage.getDatabaseTables(userId, databaseId); return { rows: tables, count: tables.length }; }
-async function execDropTable(userId, databaseId, command, storage) {
-  const tables = await storage.getDatabaseTables(userId, databaseId);
-  const table = tables.find(t => t.name === command.name);
-  if (!table) throw { code: 'TABLE_NOT_FOUND', message: `Table '${command.name}' not found` };
-  await storage.deleteTable(userId, databaseId, table.id);
-  return { message: `Table '${command.name}' deleted` };
-}
-async function execInsert(userId, databaseId, command, storage) {
-  const tables = await storage.getDatabaseTables(userId, databaseId);
-  const table = tables.find(t => t.name === command.table);
-  if (!table) throw { code: 'TABLE_NOT_FOUND', message: `Table '${command.table}' not found` };
-  const tableMeta = await storage.getTable(userId, databaseId, table.id);
-  if (!tableMeta) throw { code: 'TABLE_NOT_FOUND' };
-  const records = [];
-  for (const valueSet of command.values) {
-    const record = {};
-    if (command.columns) {
-      if (command.columns.length !== valueSet.length) throw { code: 'INVALID_SQL', message: `Column count doesn't match value count` };
-      for (let i = 0; i < command.columns.length; i++) {
-        const colName = command.columns[i];
-        const colDef = tableMeta.columns.find(c => c.name === colName);
-        if (!colDef) throw { code: 'INVALID_COLUMN', message: `Column '${colName}' not found` };
-        const val = valueSet[i];
-        if (!colDef.nullable && (val === null || val === undefined)) throw { code: 'INVALID_COLUMN_TYPE', message: `Column '${colName}' cannot be null` };
-        if (val !== null && !validateType(val, colDef.type)) throw { code: 'INVALID_COLUMN_TYPE', message: `Invalid type for column '${colName}': expected ${colDef.type}` };
-        record[colName] = coerceValue(val, colDef.type);
-      }
-    } else {
-      if (valueSet.length !== tableMeta.columns.length) throw { code: 'INVALID_SQL', message: `Value count doesn't match column count` };
-      for (let i = 0; i < tableMeta.columns.length; i++) {
-        const colDef = tableMeta.columns[i];
-        const val = valueSet[i];
-        if (!colDef.nullable && (val === null || val === undefined)) throw { code: 'INVALID_COLUMN_TYPE', message: `Column '${colDef.name}' cannot be null` };
-        if (val !== null && !validateType(val, colDef.type)) throw { code: 'INVALID_COLUMN_TYPE', message: `Invalid type for column '${colDef.name}': expected ${colDef.type}` };
-        record[colDef.name] = coerceValue(val, colDef.type);
-      }
-    }
-    record.id = record.id || getGenerateId()('sb_rec');
-    record._created_at = new Date().toISOString();
-    records.push(record);
-  }
-  await storage.insertRecords(userId, databaseId, table.id, records);
-  return { message: `${records.length} record(s) inserted`, records, count: records.length };
-}
-async function execSelect(userId, databaseId, command, storage) {
-  const tables = await storage.getDatabaseTables(userId, databaseId);
-  const table = tables.find(t => t.name === command.table);
-  if (!table) throw { code: 'TABLE_NOT_FOUND', message: `Table '${command.table}' not found` };
-  let records = await storage.getRecords(userId, databaseId, table.id) || [];
-  if (command.where) records = records.filter(r => evaluateWhere(r, command.where));
-  if (command.orderBy) {
-    const { column, direction } = command.orderBy;
-    records.sort((a, b) => { const av = a[column]; const bv = b[column]; if (av === bv) return 0; const cmp = av < bv ? -1 : 1; return direction === 'DESC' ? -cmp : cmp; });
-  }
-  const total = records.length;
-  if (command.limit) { const offset = command.offset || 0; records = records.slice(offset, offset + command.limit); }
-  let resultRows = records;
-  if (command.columns && command.columns.length > 0 && command.columns[0] !== '*') {
-    resultRows = records.map(r => { const obj = {}; command.columns.forEach(c => { obj[c] = r[c]; }); return obj; });
-  }
-  return { rows: resultRows, count: resultRows.length, total };
-}
-function evaluateWhere(record, where) {
-  if (!where) return true;
-  const { column, operator, value } = where;
-  const recVal = record[column];
-  switch (operator) {
-    case '=': return String(recVal) === String(value);
-    case '!=': return String(recVal) !== String(value);
-    case '>': return recVal > value;
-    case '<': return recVal < value;
-    case '>=': return recVal >= value;
-    case '<=': return recVal <= value;
-    case 'LIKE': { const pattern = String(value).replace(/%/g, '.*').replace(/_/g, '.'); const regex = new RegExp(`^${pattern}$`, 'i'); return regex.test(String(recVal)); }
-    default: return true;
-  }
-}
-async function execUpdate(userId, databaseId, command, storage) {
-  const tables = await storage.getDatabaseTables(userId, databaseId);
-  const table = tables.find(t => t.name === command.table);
-  if (!table) throw { code: 'TABLE_NOT_FOUND', message: `Table '${command.table}' not found` };
-  let count = 0;
-  await storage.updateRecords(userId, databaseId, table.id, (r) => {
-    if (!command.where || evaluateWhere(r, command.where)) { count++; const updated = { ...r }; for (const [k, v] of Object.entries(command.set)) { updated[k] = v; } updated._updated_at = new Date().toISOString(); return updated; }
-    return r;
+function shape(r) {
+  const results = r.results.map((x) => {
+    if (x.type !== 'rows') return { type: 'ok', message: x.message, affected_rows: x.affected ?? 0, ...(x.insertId != null ? { insert_id: x.insertId } : {}) };
+    const rows = x.rows.slice(0, MAX_ROWS).map((row) => Object.fromEntries(x.columns.map((c, i) => [c, row[i]])));
+    return { type: 'rows', columns: x.columns, rows, count: x.rows.length, ...(x.rows.length > MAX_ROWS ? { truncated: true } : {}) };
   });
-  return { message: `${count} record(s) updated`, count };
+  const last = results[results.length - 1];
+  if (!last) return { message: 'No statements to run', results };
+  return last.type === 'rows' ? { rows: last.rows, columns: last.columns, count: last.count, total: last.count, results } : { message: last.message, affected_rows: last.affected_rows, ...(last.insert_id != null ? { insert_id: last.insert_id } : {}), results };
 }
-async function execDelete(userId, databaseId, command, storage) {
-  const tables = await storage.getDatabaseTables(userId, databaseId);
-  const table = tables.find(t => t.name === command.table);
-  if (!table) throw { code: 'TABLE_NOT_FOUND', message: `Table '${command.table}' not found` };
-  let result;
-  if (command.where) result = await storage.deleteRecords(userId, databaseId, table.id, r => evaluateWhere(r, command.where));
-  else result = await storage.deleteRecords(userId, databaseId, table.id, () => true);
-  return { message: `${result.count} record(s) deleted`, count: result.count };
+function sqlError(msg) {
+  if (/Syntax error|Unsupported/.test(msg)) return { code: 'INVALID_SQL', message: msg };
+  if (/Table '.*' doesn't exist/.test(msg)) return { code: 'TABLE_NOT_FOUND', message: msg };
+  return { code: 'SQL_ERROR', message: msg };
+}
+
+export async function executeSQL(userId, databaseId, sql, { storage, authModule } = {}) {
+  const start = Date.now(), op = (String(sql).trim().split(/\s+/)[0] || 'SQL').toUpperCase();
+  const finish = async (payload) => { const duration = Date.now() - start; await storage.addAudit(userId, { operation: op, database_id: databaseId, sql: String(sql).substring(0, 200), success: true, duration }); return { success: true, ...payload, execution_time: duration }; };
+  let m;
+  if (SHOW_DB.test(sql)) { const databases = await storage.getUserDatabases(userId); return finish({ rows: databases, count: databases.length }); }
+  if ((m = CREATE_DB.exec(sql))) {
+    const name = m[2].toLowerCase(), databases = await storage.getUserDatabases(userId);
+    if (databases.find((d) => d.name.toLowerCase() === name)) { if (m[1]) return finish({ message: `Database '${name}' already exists` }); throw { code: 'DUPLICATE_DATABASE', message: `Database '${name}' already exists` }; }
+    if (databases.length >= DB_LIMIT) throw { code: 'DATABASE_LIMIT_REACHED', message: `Free accounts can create a maximum of ${DB_LIMIT} databases.` };
+    const dbData = { id: authModule.generateId('sb_db'), name, description: '', owner_id: userId, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), status: 'active' };
+    await storage.createDatabase(userId, dbData); return finish({ message: `Database '${name}' created`, database: dbData });
+  }
+  if ((m = DROP_DB.exec(sql))) {
+    const name = m[2].toLowerCase(), db = (await storage.getUserDatabases(userId)).find((d) => d.name.toLowerCase() === name);
+    if (!db) { if (m[1]) return finish({ message: `Database '${name}' not found` }); throw { code: 'DATABASE_NOT_FOUND', message: `Database '${name}' not found` }; }
+    await storage.deleteDatabase(userId, db.id); return finish({ message: `Database '${name}' deleted` });
+  }
+  if (!databaseId) throw { code: 'DATABASE_NOT_FOUND', message: 'Database ID required' };
+  const dbMeta = await storage.getDatabase(userId, databaseId);
+  if (!dbMeta || (dbMeta.owner_id && dbMeta.owner_id !== userId)) throw { code: 'DATABASE_NOT_FOUND', message: 'Database not found or access denied' };
+  const st = await loadState(storage, userId, databaseId, dbMeta, String(sql));
+  const r = run(st.db, String(sql));
+  if (r.error) throw sqlError(r.error); // nothing is saved when any statement fails
+  if (r.changed) await persist(storage, authModule, userId, databaseId, st);
+  return finish(shape(r));
 }

@@ -250,6 +250,25 @@ export class StorageAdapter {
     return updated;
   }
 
+  // Replace all records of a table in one write (used by the SQL engine bridge).
+  async setRecords(userId, dbId, tableId, records) {
+    const result = await this.hf.writeFile(this.tableRecordsPath(userId, dbId, tableId), records);
+    if (!result.success) throw { code: 'STORAGE_WRITE_FAILED', message: 'Failed to persist records' };
+    return records;
+  }
+  async renameTableInList(userId, dbId, tableId, name) {
+    const list = await this.hf.readFile(this.databaseTablesPath(userId, dbId)) || [];
+    const result = await this.hf.writeFile(this.databaseTablesPath(userId, dbId), list.map(t => t.id === tableId ? { ...t, name } : t));
+    if (!result.success) throw { code: 'STORAGE_WRITE_FAILED', message: 'Failed to update tables list' };
+  }
+  // Views / indexes created through SQL live in the database metadata (single small write).
+  async setDatabaseEngineState(userId, dbId, state) {
+    const meta = await this.getDatabase(userId, dbId);
+    if (!meta) return null;
+    const result = await this.hf.writeFile(this.databaseMetaPath(userId, dbId), { ...meta, engine: state, updated_at: new Date().toISOString() });
+    if (!result.success) throw { code: 'STORAGE_WRITE_FAILED', message: 'Failed to update database' };
+    return state;
+  }
   async deleteUser(userId) {
     const databases = await this.getUserDatabases(userId);
     for (const db of databases) {
