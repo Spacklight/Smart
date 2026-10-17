@@ -1,5 +1,6 @@
 import express from 'express';
 import { createFileService } from '../files/files.js';
+import { createEmailLaunch } from '../integrations/email-sso.js';
 
 const DATABASE_LIMIT = 20;
 const TABLE_LIMIT = 50;
@@ -624,6 +625,14 @@ export function createApiRouter({ storage, authModule, authMiddleware, apiKeys, 
   });
   router.delete('/files/:name', authMiddleware, async (req, res) => {
     try { return res.json({ success: true, ...(await fileService.remove(req.userId, req.params.name)) }); } catch (e) { return fileErr(res, e); }
+  });
+
+  // ---- Open the Email platform without a second login (browser session only, never an API key) ----
+  const emailLaunch = createEmailLaunch({ authModule, env });
+  router.post('/integrations/email/launch', authMiddleware, async (req, res) => {
+    if (req.apiKeyType) return res.status(403).json({ success: false, error: 'KEY_PERMISSION_DENIED', message: 'API keys cannot open the Email platform.' });
+    try { return res.json({ success: true, ...(await emailLaunch(req.userId)) }); }
+    catch (e) { return res.status(e.code === 'NOT_CONFIGURED' ? 503 : e.code === 'USER_NOT_FOUND' ? 404 : 500).json({ success: false, error: e.code || 'LAUNCH_FAILED', message: e.message || 'Could not open the Email platform.' }); }
   });
 
   return router;

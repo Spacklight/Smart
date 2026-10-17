@@ -45,7 +45,7 @@ export function createApiKeyMiddleware({ apiKeys }) {
 
   return async function apiKeyMiddleware(req, res, next) {
     try {
-      if (req.path.startsWith('/api-keys')) {
+      if (req.path.startsWith('/api-keys') || req.path.startsWith('/integrations')) {
         return res.status(403).json({ success: false, error: 'KEY_PERMISSION_DENIED', message: 'API keys cannot manage API keys.' });
       }
       const raw = extractKey(req);

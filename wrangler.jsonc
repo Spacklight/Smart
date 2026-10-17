@@ -15,6 +15,7 @@
   },
   "vars": {
     "HF_DATASET": "Spacklight/chiwoko",
+    "EMAIL_PLATFORM_URL": "https://email.emalawi19.workers.dev",
     "NODE_ENV": "production",
     "CLOUDFLARE": "1",
     "FIREBASE_PROJECT_ID": "smartbase-auth",

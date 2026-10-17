@@ -782,6 +782,18 @@ function escapeHtml(v) {
 }
 
 
+// Opens the Email platform in a new tab, already signed in (no second login or registration).
+async function openEmailPlatform() {
+  const tab = window.open('', '_blank');
+  try {
+    const data = await api('/integrations/email/launch', { method: 'POST', body: JSON.stringify({}) });
+    if (tab) { tab.opener = null; tab.location.href = data.url; } else window.location.href = data.url;
+  } catch (e) {
+    if (tab) tab.close();
+    showToast(e.message || 'Could not open the Email platform.', 'error');
+  }
+}
+
 function fmtBytes(n) { const u = ['B','KB','MB','GB']; let i = 0; n = Number(n) || 0; while (n >= 1024 && i < 3) { n /= 1024; i++; } return n.toFixed(i ? 2 : 0) + ' ' + u[i]; }
 
 async function renderFiles() {
