@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Smartbase - SQL-Powered Cloud Database Platform</title>
+<meta name="description" content="Smartbase by Miyoni: create cloud databases, run SQL, store files, use a REST API with API keys and add Google sign-in and email tools to your website. Free plan.">
+<link rel="canonical" href="https://smartbase.de5.net/">
+<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Smartbase">
+<meta property="og:title" content="Smartbase - SQL-Powered Cloud Database Platform">
+<meta property="og:description" content="Smartbase by Miyoni: create cloud databases, run SQL, store files, use a REST API with API keys and add Google sign-in and email tools to your website. Free plan.">
+<meta property="og:url" content="https://smartbase.de5.net/">
+<meta name="twitter:card" content="summary">
+<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "Organization", "@id": "https://smartbase.de5.net/#org", "name": "Miyoni", "url": "https://smartbase.de5.net/", "email": "emalawi19@gmail.com"}, {"@type": "WebSite", "@id": "https://smartbase.de5.net/#site", "name": "Smartbase", "url": "https://smartbase.de5.net/", "publisher": {"@id": "https://smartbase.de5.net/#org"}}, {"@type": "SoftwareApplication", "name": "Smartbase", "applicationCategory": "DeveloperApplication", "operatingSystem": "Web", "url": "https://smartbase.de5.net/", "description": "Smartbase by Miyoni: create cloud databases, run SQL, store files, use a REST API with API keys and add Google sign-in and email tools to your website. Free plan.", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "publisher": {"@id": "https://smartbase.de5.net/#org"}}]}</script>
 <link rel="icon" type="image/svg+xml" href="https://api.iconify.design/mdi/database-cog-outline.svg?color=%2300d4ff">
 <link rel="stylesheet" href="/css/style.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -16,6 +26,8 @@
     <nav class="landing-nav">
       <div class="logo"><img class="logo-icon-img" src="https://api.iconify.design/mdi/database-cog-outline.svg?color=%2300d4ff" alt="Smartbase"> SMARTBASE</div>
       <div class="nav-links">
+        <a class="btn" href="/docs" style="text-decoration:none">Docs</a>
+        <a class="btn" href="/about" style="text-decoration:none">About</a>
         <button class="btn theme-toggle" onclick="toggleTheme()" id="landingThemeBtn" aria-label="Switch theme">☀️ Light</button>
         <button class="btn" onclick="showAuth('login')">Log In</button>
         <button class="btn btn-primary" onclick="showAuth('register')">Get Started</button>
@@ -49,7 +61,9 @@
     </div>
 
     <div style="text-align:center; padding:3rem; border-top:1px solid var(--border); margin-top:2rem;">
-      <p style="color: var(--text-muted);">Free Plan: 20 databases • 50 tables per database • 500 tables total • 500 MB storage • 25 MB max file • 2,000 API requests/day</p>
+      <p style="color: var(--text-muted);">Free Plan: 20 databases • 50 tables per database • 500 tables total • 500 MB file storage • 7 MB max file • 2,000 API requests/day</p>
+      <p style="margin-top:1.2rem;font-size:0.9rem;color:var(--text-muted);"><a href="/about">About</a> · <a href="/docs">Documentation</a> · <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a> · <a href="mailto:emalawi19@gmail.com">emalawi19@gmail.com</a></p>
+      <p style="font-size:0.85rem;color:var(--text-muted);">© 2026 Miyoni. Smartbase is a Miyoni product.</p>
     </div>
   </div>
 
@@ -59,6 +73,7 @@
       <div class="auth-brand"><img src="https://api.iconify.design/mdi/database-cog-outline.svg?color=%2300d4ff" alt="Smartbase"></div>
       <h2 id="authTitle">Create Account</h2>
       <p id="authSubtitle" class="auth-subtitle">Use your Google account to create a secure Smartbase account.</p>
+      <p style="margin:0 0 .8rem;font-size:.8rem;color:var(--text-muted);">By continuing you agree to our <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</p>
       <div id="authError" class="auth-error hidden"></div>
       <label id="termsRow" class="terms-row hidden">
         <input type="checkbox" id="termsCheckbox">

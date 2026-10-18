@@ -1,0 +1,18 @@
+# Smartbase
+
+> Smartbase is a cloud database and developer platform by Miyoni. Create databases and tables, run SQL (joins, grouping, subqueries, views, transactions), store files, use a REST API with read/write API keys, and add Google sign-in plus email broadcasts to your own website. Free plan available. Contact: emalawi19@gmail.com
+
+## Documentation
+- [Documentation](https://smartbase.de5.net/docs): REST API, API keys, SQL reference, files, limits, errors, Auth & Email platform
+- [Full documentation and policies as plain text](https://smartbase.de5.net/llms-full.txt): About, Documentation, Privacy Policy and Terms in one Markdown file
+
+## Company and policies
+- [About Miyoni and Smartbase](https://smartbase.de5.net/about): overview, mission, vision, products, story, contact
+- [Privacy Policy](https://smartbase.de5.net/privacy)
+- [Terms of Service](https://smartbase.de5.net/terms)
+
+## Key facts
+- API base address: https://smartbase.de5.net/apiv1 (authenticate with `Authorization: Bearer <API key>`)
+- Web app: https://smartbase.de5.net
+- Limits (free plan): 20 databases, 50 tables per database, 500 tables total, 5 API keys, files up to 7 MB each and 500 MB per account, 20 API requests per minute and 2,000 per day
+- Company: Miyoni, contact emalawi19@gmail.com

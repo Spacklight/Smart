@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smartbase Documentation | Smartbase by Miyoni</title>
+<meta name="description" content="Smartbase documentation: REST API, API keys, SQL reference, file storage, limits, errors and the Auth &amp; Email platform, with code examples.">
+<link rel="canonical" href="https://smartbase.de5.net/docs">
+<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Smartbase">
+<meta property="og:title" content="Smartbase Documentation | Smartbase">
+<meta property="og:description" content="Smartbase documentation: REST API, API keys, SQL reference, file storage, limits, errors and the Auth &amp; Email platform, with code examples.">
+<meta property="og:url" content="https://smartbase.de5.net/docs">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%2300a8cc' d='M12 3C7.6 3 4 4.3 4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6c0-1.7-3.6-3-8-3z'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/css/site.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "Organization", "@id": "https://smartbase.de5.net/#org", "name": "Miyoni", "url": "https://smartbase.de5.net/", "email": "emalawi19@gmail.com", "contactPoint": {"@type": "ContactPoint", "email": "emalawi19@gmail.com", "contactType": "customer support"}}, {"@type": "WebSite", "@id": "https://smartbase.de5.net/#site", "name": "Smartbase", "url": "https://smartbase.de5.net/", "publisher": {"@id": "https://smartbase.de5.net/#org"}}, {"@type": "TechArticle", "name": "Smartbase Documentation", "headline": "Smartbase Documentation", "url": "https://smartbase.de5.net/docs", "description": "Smartbase documentation: REST API, API keys, SQL reference, file storage, limits, errors and the Auth & Email platform, with code examples.", "inLanguage": "en", "dateModified": "2026-10-18", "author": {"@id": "https://smartbase.de5.net/#org"}, "publisher": {"@id": "https://smartbase.de5.net/#org"}, "isPartOf": {"@id": "https://smartbase.de5.net/#site"}}, {"@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is Smartbase free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The free plan includes the limits listed above."}}, {"@type": "Question", "name": "Can I use Smartbase from my own website or app?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Create an API key in the API Center and call https://smartbase.de5.net/apiv1 from your server."}}, {"@type": "Question", "name": "Can a read key delete data?", "acceptedAnswer": {"@type": "Answer", "text": "No. A read key can only read. Changing data needs a write key."}}, {"@type": "Question", "name": "Where is my data stored?", "acceptedAnswer": {"@type": "Answer", "text": "Smartbase runs on Cloudflare, and your databases and files are stored as private files in cloud storage operated by Miyoni. See the Privacy Policy for details."}}]}]}</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header"><a class="brand" href="/">Smartbase</a><nav aria-label="Main"><a href="/">Home</a><a href="/about">About</a><a href="/docs" aria-current="page">Documentation</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></nav></header>
+<main id="main" class="doc">
+<nav class="toc" aria-label="On this page"><strong>On this page</strong><ul><li><a href="#quick-start">Quick start</a></li><li><a href="#authentication-and-api-keys">Authentication and API keys</a></li><li><a href="#endpoints">Endpoints</a></li><li><a href="#sql">SQL</a></li><li><a href="#files">Files</a></li><li><a href="#limits-free-plan">Limits (free plan)</a></li><li><a href="#errors">Errors</a></li><li><a href="#auth-and-email-platform">Auth and Email platform</a></li><li><a href="#security">Security</a></li><li><a href="#frequently-asked-questions">Frequently asked questions</a></li><li><a href="#support">Support</a></li></ul></nav>
+<article>
+<h1 id="smartbase-documentation">Smartbase documentation</h1>
+<p>Smartbase is a cloud database and developer platform made by Miyoni. This guide covers the dashboard, the REST API, SQL, file storage and the Auth &amp; Email platform. Base address of the API: <code>https://smartbase.de5.net/apiv1</code>.</p>
+<h2 id="quick-start">Quick start</h2>
+<ol><li>Create an account at <a href="https://smartbase.de5.net">https://smartbase.de5.net</a> with Google and create a database in the dashboard.</li><li>Open <strong>API Center</strong> and create an API key. A <em>read</em> key can only read, a <em>write</em> key can change data, and a <em>collective</em> key creates one of each.</li><li>Make your first request:</li></ol>
+<pre><code>curl -X POST https://smartbase.de5.net/apiv1/query \
+  -H &quot;Authorization: Bearer YOUR_READ_KEY&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &#x27;{&quot;database_id&quot;:&quot;YOUR_DATABASE_ID&quot;,&quot;sql&quot;:&quot;SELECT * FROM customers LIMIT 10&quot;}&#x27;</code></pre>
+<h2 id="authentication-and-api-keys">Authentication and API keys</h2>
+<p>Send your key in the <code>Authorization: Bearer YOUR_API_KEY</code> header, or in an <code>X-API-Key</code> header.</p>
+<div class="table-wrap"><table><thead><tr><th>Key type</th><th>What it can do</th></tr></thead><tbody><tr><td>read</td><td><code>GET</code> requests and SQL that only reads (<code>SELECT</code>, <code>SHOW</code>, <code>DESCRIBE</code>)</td></tr><tr><td>write</td><td><code>POST</code>, <code>PUT</code>, <code>DELETE</code>, and SQL that changes data or structure</td></tr><tr><td>collective</td><td>Creates one read key and one write key together</td></tr></tbody></table></div>
+<ul><li>You can have up to 5 API keys per account. A key is shown only once when it is created, and only a hash is stored.</li><li>API keys cannot create or revoke keys and cannot open the Auth &amp; Email platform.</li><li>Never put a write key in website or mobile app code that users can see. Keep keys on your server.</li><li>Dashboard (browser) requests use <code>https://smartbase.de5.net/api/v1</code> with your login session; programs should use <code>https://smartbase.de5.net/apiv1</code> with an API key.</li></ul>
+<h2 id="endpoints">Endpoints</h2>
+<p>All paths below are relative to <code>https://smartbase.de5.net/apiv1</code>. Every response is JSON with <code>"success": true</code> or <code>"success": false</code> and an <code>error</code> code.</p>
+<div class="table-wrap"><table><thead><tr><th>Method</th><th>Path</th><th>Key</th><th>Purpose</th></tr></thead><tbody><tr><td>GET</td><td><code>/databases</code></td><td>read</td><td>List your databases</td></tr><tr><td>POST</td><td><code>/databases</code></td><td>write</td><td>Create a database (<code>name</code>, optional <code>description</code>)</td></tr><tr><td>GET</td><td><code>/databases/:databaseId</code></td><td>read</td><td>Get one database</td></tr><tr><td>PUT / DELETE</td><td><code>/databases/:databaseId</code></td><td>write</td><td>Update or delete a database</td></tr><tr><td>GET</td><td><code>/databases/:databaseId/tables</code></td><td>read</td><td>List tables</td></tr><tr><td>POST</td><td><code>/databases/:databaseId/tables</code></td><td>write</td><td>Create a table (<code>name</code>, <code>columns</code>)</td></tr><tr><td>GET</td><td><code>/databases/:databaseId/tables/:tableId/records?page=1&amp;limit=50</code></td><td>read</td><td>List records (limit up to 100)</td></tr><tr><td>POST</td><td><code>/databases/:databaseId/tables/:tableId/records</code></td><td>write</td><td>Insert up to 100 records (<code>records</code> array)</td></tr><tr><td>PUT</td><td><code>.../records/:recordId</code></td><td>write</td><td>Update a record</td></tr><tr><td>DELETE</td><td><code>.../records/:recordId</code></td><td>write</td><td>Delete a record</td></tr><tr><td>POST</td><td><code>/query</code></td><td>read or write</td><td>Run SQL (<code>database_id</code>, <code>sql</code>)</td></tr><tr><td>GET</td><td><code>/files</code> and <code>/files/:name</code></td><td>read</td><td>List or download files</td></tr><tr><td>PUT / POST / DELETE</td><td><code>/files</code></td><td>write</td><td>Upload or delete files</td></tr><tr><td>GET</td><td><code>/usage</code></td><td>read</td><td>File storage used and remaining</td></tr></tbody></table></div>
+<p>Column types are <code>INTEGER</code>, <code>FLOAT</code>, <code>TEXT</code>, <code>BOOLEAN</code>, <code>DATE</code>, <code>DATETIME</code> and <code>JSON</code>. Example table and record:</p>
+<pre><code>curl -X POST https://smartbase.de5.net/apiv1/databases/DB_ID/tables -H &quot;Authorization: Bearer WRITE_KEY&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &#x27;{&quot;name&quot;:&quot;customers&quot;,&quot;columns&quot;:[{&quot;name&quot;:&quot;name&quot;,&quot;type&quot;:&quot;TEXT&quot;,&quot;nullable&quot;:false},{&quot;name&quot;:&quot;age&quot;,&quot;type&quot;:&quot;INTEGER&quot;,&quot;nullable&quot;:true}]}&#x27;
+
+curl -X POST https://smartbase.de5.net/apiv1/databases/DB_ID/tables/TABLE_ID/records -H &quot;Authorization: Bearer WRITE_KEY&quot; \
+  -H &quot;Content-Type: application/json&quot; -d &#x27;{&quot;records&quot;:[{&quot;name&quot;:&quot;Ann&quot;,&quot;age&quot;:30}]}&#x27;</code></pre>
+<h2 id="sql">SQL</h2>
+<p>Send SQL to <code>POST /query</code> with the <code>database_id</code> and the <code>sql</code> text. You can send several statements separated by <code>;</code>. If one statement fails, none of the statements in that request are saved. A script that only reads needs a read key; anything else needs a write key.</p>
+<p>Supported SQL:</p>
+<ul><li><code>CREATE TABLE</code> (with <code>PRIMARY KEY</code>, <code>AUTO_INCREMENT</code>, <code>UNIQUE</code>, <code>NOT NULL</code>, <code>DEFAULT</code>, <code>CHECK</code>), <code>ALTER TABLE</code>, <code>DROP TABLE</code>, <code>TRUNCATE</code>, views and indexes.</li><li><code>INSERT</code> (multi-row, <code>INSERT ... SELECT</code>, <code>ON DUPLICATE KEY UPDATE</code>), <code>UPDATE</code> and <code>DELETE</code> with expressions.</li><li><code>SELECT</code> with <code>DISTINCT</code>, all <code>JOIN</code> types, <code>WHERE</code>, <code>GROUP BY</code>, <code>HAVING</code>, <code>ORDER BY</code>, <code>LIMIT</code>/<code>OFFSET</code>, subqueries, <code>WITH</code> (including recursive), <code>UNION</code>/<code>INTERSECT</code>/<code>EXCEPT</code>, <code>CASE</code>, <code>CAST</code>, <code>LIKE</code>, <code>BETWEEN</code>, <code>IN</code> and more than 60 functions and aggregates.</li><li><code>BEGIN</code>/<code>COMMIT</code>/<code>ROLLBACK</code>, <code>SHOW TABLES</code>, <code>DESCRIBE</code>, and <code>CREATE DATABASE</code> / <code>SHOW DATABASES</code> / <code>DROP DATABASE</code>.</li></ul>
+<p>Not available yet: window functions (<code>OVER</code>), triggers and stored procedures.</p>
+<pre><code>{&quot;success&quot;: true, &quot;columns&quot;: [&quot;customer&quot;,&quot;spent&quot;], &quot;rows&quot;: [{&quot;customer&quot;:&quot;Ann&quot;,&quot;spent&quot;:120.5}], &quot;count&quot;: 1, &quot;execution_time&quot;: 14}</code></pre>
+<h2 id="files">Files</h2>
+<p>Upload with a write key by sending the file bytes as the body, then download or list with a read key:</p>
+<pre><code>curl -X PUT https://smartbase.de5.net/apiv1/files/photo.jpg -H &quot;Authorization: Bearer WRITE_KEY&quot; \
+  -H &quot;Content-Type: image/jpeg&quot; --data-binary @photo.jpg
+curl https://smartbase.de5.net/apiv1/files -H &quot;Authorization: Bearer READ_KEY&quot;
+curl -o photo.jpg https://smartbase.de5.net/apiv1/files/photo.jpg -H &quot;Authorization: Bearer READ_KEY&quot;</code></pre>
+<p>Files can also be uploaded as JSON (<code>POST /files</code> with <code>name</code>, base64 <code>data</code> and <code>content_type</code>). Maximum 7 MB per file and 500 MB per account.</p>
+<h2 id="limits-free-plan">Limits (free plan)</h2>
+<ul><li>20 databases, 50 tables per database, 500 tables in total.</li><li>5 API keys per account.</li><li>2 MB request body for normal API calls.</li><li>Files: 7 MB per file, 500 MB per account.</li><li>API keys are limited to 20 requests per minute and 2,000 requests per day. When you reach a limit the API answers <code>429</code> with <code>RATE_LIMIT_EXCEEDED</code> and a retry time.</li></ul>
+<h2 id="errors">Errors</h2>
+<p>Errors look like <code>{"success": false, "error": "CODE", "message": "Explanation"}</code>.</p>
+<div class="table-wrap"><table><thead><tr><th>Code</th><th>Meaning</th></tr></thead><tbody><tr><td><code>UNAUTHORIZED</code></td><td>Missing or invalid API key or login</td></tr><tr><td><code>KEY_PERMISSION_DENIED</code></td><td>The key type is not allowed for this action (for example a read key trying to write)</td></tr><tr><td><code>RATE_LIMIT_EXCEEDED</code></td><td>Too many requests; wait and retry</td></tr><tr><td><code>DATABASE_NOT_FOUND</code>, <code>TABLE_NOT_FOUND</code></td><td>The id does not exist or is not yours</td></tr><tr><td><code>INVALID_SQL</code>, <code>SQL_ERROR</code></td><td>The SQL could not be parsed or failed (nothing was saved)</td></tr><tr><td><code>DATABASE_LIMIT_REACHED</code>, <code>TABLE_LIMIT_REACHED</code></td><td>A free-plan limit was reached</td></tr><tr><td><code>FILE_TOO_LARGE</code>, <code>STORAGE_QUOTA_EXCEEDED</code></td><td>File limits were reached</td></tr></tbody></table></div>
+<h2 id="auth-and-email-platform">Auth and Email platform</h2>
+<p>The Auth &amp; Email platform lets visitors of <strong>your</strong> website sign in with Google, and gives you tools to manage those users. Open it from the <strong>Auth &amp; Email</strong> option in the Smartbase menu; you are signed in automatically. It currently runs at https://email.emalawi19.workers.dev.</p>
+<p>Add the sign-in button to your site:</p>
+<pre><code>&lt;div id=&quot;google-login&quot;&gt;&lt;/div&gt;
+&lt;script src=&quot;https://email.emalawi19.workers.dev/smartbase.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+  Smartbase.init({ projectId: &quot;YOUR_PROJECT_ID&quot; });
+  Smartbase.googleButton(&quot;#google-login&quot;);
+  var result = Smartbase.getRedirectResult();
+  if (result &amp;&amp; result.code) {
+    // send result.code to YOUR server, then exchange it with your secret key
+  }
+&lt;/script&gt;</code></pre>
+<p>On your server, exchange the one-time code for the verified profile with <code>POST https://email.emalawi19.workers.dev/api/v1/google/exchange</code>, sending your project key in the <code>X-Smartbase-Key</code> header.</p>
+<p>Features:</p>
+<ul><li><strong>Google app options</strong> - use the default Smartbase Google app, or your own Google client ID and secret.</li><li><strong>Custom sign-in domain</strong> - let Google redirect through your own domain by forwarding <code>/__smartbase/*</code> to Smartbase (needs your own Google app).</li><li><strong>User storage</strong> - keep users with the platform, in your own Smartbase database (ready-made template, or a custom table described with the <code>smartbase-data.js</code> SDK), or send each sign-in to your own server through a signed gateway.</li><li><strong>Account control</strong> - "one account, one device": <em>monitor</em> to count real users without duplicates, or <em>enforce</em> to block a second account on the same device.</li><li><strong>Database copy</strong> - download an offline HTML copy of your users' data.</li><li><strong>Broadcasts</strong> - send test emails and mass emails with sent and opened tracking; every email includes an unsubscribe link.</li></ul>
+<h2 id="security">Security</h2>
+<ul><li>Passwords (for accounts that use one) are stored only as salted hashes, and API keys only as hashes.</li><li>Every request is checked against the account that owns the data.</li><li>Traffic is encrypted with HTTPS. Secrets such as Google client secrets are encrypted before storage.</li><li>Report a security problem to <a href="mailto:emalawi19@gmail.com">emalawi19@gmail.com</a>.</li></ul>
+<h2 id="frequently-asked-questions">Frequently asked questions</h2>
+<h3 id="is-smartbase-free">Is Smartbase free?</h3>
+<p>Yes. The free plan includes the limits listed above.</p>
+<h3 id="can-i-use-smartbase-from-my-own-website-or-app">Can I use Smartbase from my own website or app?</h3>
+<p>Yes. Create an API key in the API Center and call <code>https://smartbase.de5.net/apiv1</code> from your server.</p>
+<h3 id="can-a-read-key-delete-data">Can a read key delete data?</h3>
+<p>No. A read key can only read. Changing data needs a write key.</p>
+<h3 id="where-is-my-data-stored">Where is my data stored?</h3>
+<p>Smartbase runs on Cloudflare, and your databases and files are stored as private files in cloud storage operated by Miyoni. See the <a href="https://smartbase.de5.net/privacy">Privacy Policy</a> for details.</p>
+<h2 id="support">Support</h2>
+<p>Email <a href="mailto:emalawi19@gmail.com">emalawi19@gmail.com</a>. Please include your account email and, if relevant, the error code you received (never send API keys or passwords).</p>
+</article>
+</main>
+<footer class="site-footer">
+<p>&copy; 2026 Miyoni. Smartbase is a Miyoni product. Contact: <a href="mailto:emalawi19@gmail.com">emalawi19@gmail.com</a></p>
+<p><a href="/about">About</a> &middot; <a href="/docs">Documentation</a> &middot; <a href="/privacy">Privacy Policy</a> &middot; <a href="/terms">Terms of Service</a> &middot; <a href="/llms.txt">llms.txt</a></p>
+</footer>
+</body>
+</html>

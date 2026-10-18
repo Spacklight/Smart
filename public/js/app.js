@@ -857,7 +857,9 @@ async function deleteFile(name) {
   catch (e) { showToast(e.message || 'Delete failed.', 'error'); }
 }
 
-function apiBaseUrl() { return `${location.origin}/apiv1`; }
+// The official public address of the API (shown in all examples). Local testing keeps the local address.
+const PUBLIC_ORIGIN = 'https://smartbase.de5.net';
+function apiBaseUrl() { return `${['localhost', '127.0.0.1'].includes(location.hostname) ? location.origin : PUBLIC_ORIGIN}/apiv1`; }
 
 async function copyText(text, btn) {
   try {

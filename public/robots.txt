@@ -1,0 +1,114 @@
+# Smartbase by Miyoni. Public pages are open to search engines, AI assistants and other crawlers.
+# The API and the signed-in dashboard require authentication and are not meant to be crawled.
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: Googlebot
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: Bingbot
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: DuckDuckBot
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: Applebot
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: Applebot-Extended
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: GPTBot
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: Claude-Web
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: anthropic-ai
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: CCBot
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: Amazonbot
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: cohere-ai
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: Meta-ExternalAgent
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: FacebookBot
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: YouBot
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: Diffbot
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+User-agent: Bytespider
+Allow: /
+Disallow: /api/
+Disallow: /apiv1/
+
+Sitemap: https://smartbase.de5.net/sitemap.xml
