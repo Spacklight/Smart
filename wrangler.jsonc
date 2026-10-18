@@ -18,8 +18,7 @@
     "EMAIL_PLATFORM_URL": "https://email.emalawi19.workers.dev",
     "NODE_ENV": "production",
     "CLOUDFLARE": "1",
-    "FIREBASE_PROJECT_ID": "smartbase-auth",
-    "FIREBASE_API_KEY": "AIzaSyDr0UtB5smvbB4HjmqQ_RueEY6lXR1Oqx8"
+    "PUBLIC_URL": "https://smartbase.de5.net"
   },
   "observability": {
     "enabled": true

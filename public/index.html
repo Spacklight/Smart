@@ -67,7 +67,7 @@
     </div>
   </div>
 
-  <!-- Google/Firebase Authentication Modal -->
+  <!-- Google Authentication Modal -->
   <div id="authModal" class="modal hidden">
     <div class="modal-content auth-card">
       <div class="auth-brand"><img src="https://api.iconify.design/mdi/database-cog-outline.svg?color=%2300d4ff" alt="Smartbase"></div>
@@ -82,7 +82,7 @@
       <button type="button" class="google-auth-btn" onclick="handleGoogleAuth()">
         <span class="google-mark">G</span><span id="authGoogleText">Continue with Google</span>
       </button>
-      <p class="auth-trust">Your Google account verifies control of the email address. Smartbase does not use Firebase Firestore or Firebase Storage for your database data.</p>
+      <p class="auth-trust">Your Google account verifies control of your email address. Smartbase never sees your Google password.</p>
       <button class="btn" style="width:100%; margin-top:1rem; justify-content:center;" onclick="hideAuth()">Cancel</button>
     </div>
   </div>
@@ -171,9 +171,6 @@
   </div>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-auth-compat.js"></script>
-<script src="/js/firebase-auth.js"></script>
 <script src="/js/ui.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/external-storage.js" defer></script>

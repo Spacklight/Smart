@@ -207,7 +207,7 @@ Last updated: 18 October 2026
 This Privacy Policy explains how Miyoni ("Miyoni", "we", "us") collects, uses and protects information when you use Smartbase at https://smartbase.de5.net and the related Auth & Email platform (together, the "Service"). Contact: [emalawi19@gmail.com](mailto:emalawi19@gmail.com).
 
 ## 1. Information we collect
-**Account information.** When you sign in with Google we receive your name, email address, profile picture address and a Google account identifier through Google/Firebase Authentication. If you create an account with a username and password, we store your username, email and a salted hash of your password (never the password itself).
+**Account information.** When you sign in with Google we receive your name, email address, profile picture address and a Google account identifier through Google Sign-In. If you create an account with a username and password, we store your username, email and a salted hash of your password (never the password itself).
 
 **Content you store.** Databases, table definitions, records, SQL statements you run, and files you upload. This is your content and we use it only to provide the Service to you.
 
@@ -227,7 +227,7 @@ This Privacy Policy explains how Miyoni ("Miyoni", "we", "us") collects, uses an
 We do not sell your personal information and we do not use your stored content for advertising.
 
 ## 3. Who we share information with
-We use service providers to run the Service: Google (Firebase Authentication, Google sign-in, Gmail for sending email, Google Fonts), Cloudflare (hosting, networking and databases) and Hugging Face (private cloud storage for databases and files). If you connect your own external storage, such as Backblaze B2, your files go to the account you configured. Providers process information only to provide their services. We may disclose information if required by law or to protect the rights, safety and security of users and the Service.
+We use service providers to run the Service: Google (Google Sign-In, Gmail for sending email, Google Fonts), Cloudflare (hosting, networking and databases) and Hugging Face (private cloud storage for databases and files). If you connect your own external storage, such as Backblaze B2, your files go to the account you configured. Providers process information only to provide their services. We may disclose information if required by law or to protect the rights, safety and security of users and the Service.
 
 If you are a developer who uses Smartbase to sign in visitors of your own website, you decide how that visitor data is used and stored (for example in your own database or on your own server), and you are responsible for informing your visitors and following the laws that apply to you.
 

@@ -67,25 +67,12 @@ export async function createApp(env = {}) {
   // Public API-key API - same endpoints, authenticated by API key at /apiv1
   const apiKeyRouter = createApiRouter({ storage, authModule, authMiddleware: apiKeyMiddleware, apiKeys, plusStorage, env });
 
-  app.post('/api/v1/auth/firebase', async (req, res) => {
-    try {
-      const idToken = String(req.body?.idToken || '').trim();
-      if (!idToken) return res.status(400).json({ success: false, error: 'FIREBASE_TOKEN_REQUIRED', message: 'Google authentication token is required.' });
-      const { user, token } = await authModule.loginWithFirebase({
-        idToken,
-        termsAccepted: req.body?.termsAccepted === true,
-        termsVersion: String(req.body?.termsVersion || '2026-09-29'),
-        firebaseApiKey: env.FIREBASE_API_KEY || env.FIREBASE_WEB_API_KEY || '',
-        firebaseProjectId: env.FIREBASE_PROJECT_ID || ''
-      });
-      await adminModule.recordSession(user, { city: req.headers['x-cf-city'] || '', region: req.headers['x-cf-region'] || '', country: req.headers['x-cf-country'] || '' });
-      res.cookie('token', token, { httpOnly: true, maxAge: 7*24*60*60*1000, sameSite: 'lax', secure: isProduction, path: '/' });
-      return res.json({ success: true, user, token });
-    } catch (e) {
-      const status = e.code === 'FIREBASE_TOKEN_REQUIRED' || e.code === 'TERMS_REQUIRED' ? 400 : e.code === 'GOOGLE_EMAIL_NOT_VERIFIED' ? 403 : e.code === 'FIREBASE_NOT_CONFIGURED' ? 500 : 401;
-      return res.status(status).json({ success: false, error: e.code || 'GOOGLE_AUTH_FAILED', message: e.message || 'Google authentication failed.' });
-    }
-  });
+  // Sign in with Google (Smartbase's own OAuth client - no Firebase)
+  const { createGoogleOAuth } = await import('./auth/google-oauth.js');
+  const googleOAuth = createGoogleOAuth({ authModule, adminModule, env, isProduction });
+  app.get('/api/v1/auth/google/start', googleOAuth.start);
+  app.get('/api/v1/auth/google/callback', googleOAuth.callback);
+  app.get('/api/v1/auth/session', googleOAuth.session);
 
   // Public community experiences. Reading is public; publishing requires a
   // verified Smartbase session and is limited to one current experience per user.

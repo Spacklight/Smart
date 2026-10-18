@@ -180,12 +180,13 @@ The dataset catalog is administrative metadata only. The platform's primary stor
 
 ## Authentication
 
-Smartbase uses Firebase Authentication with Google Sign-In for browser account creation and sign-in. Firebase is used only as the identity/authentication layer; Smartbase application records, databases, tables, records, usage data and API-key metadata remain in the configured Hugging Face dataset storage.
+Smartbase signs users in with Google using its own OAuth client (authorization-code flow, no Firebase).
 
-The Firebase Web API key and project ID are client configuration values and are included in the web configuration. Do not add Firebase service-account private keys to the project.
-
-Google authentication requires the production Smartbase domain to be listed in Firebase Authentication > Settings > Authorized domains.
-
+- Flow: `/api/v1/auth/google/start` sends the browser to Google; Google returns to `/api/v1/auth/google/callback`; the browser then collects its session from `/api/v1/auth/session`.
+- Worker secrets: `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (never put the secret in frontend code). `PUBLIC_URL` (in `wrangler.jsonc`) is the official address, `https://smartbase.de5.net`.
+- In Google Cloud Console (OAuth client "Smartbase Web Client") add this **Authorized redirect URI**: `https://smartbase.de5.net/api/v1/auth/google/callback`.
+- Scopes requested: `openid email profile`. A verified Google email is required.
+- Existing accounts are matched by email, so people who signed in before keep their account and data.
 
 ## Recent UI features
 - Professional toast/prompt dialogs with no native browser alert/prompt/confirm UI.

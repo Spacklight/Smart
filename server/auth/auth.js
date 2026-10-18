@@ -74,56 +74,27 @@ export function createAuthModule({ storage, env = {}, jwtSecret } = {}) {
     await saveUsers(users);
     return true;
   }
-  async function loginWithFirebase({ idToken, firebaseApiKey, firebaseProjectId, termsAccepted = false, termsVersion = '2026-09-29' }) {
-    if (!idToken) throw { code: 'FIREBASE_TOKEN_REQUIRED', message: 'Google authentication token is required.' };
-    if (!firebaseApiKey || !firebaseProjectId) throw { code: 'FIREBASE_NOT_CONFIGURED', message: 'Google authentication is not configured on the server.' };
-    const lookupUrl = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(firebaseApiKey)}`;
-    let response;
-    try {
-      response = await fetch(lookupUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken })
-      });
-    } catch (e) {
-      throw { code: 'FIREBASE_VERIFY_FAILED', message: `Could not verify Google account: ${e.message}` };
-    }
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !Array.isArray(payload.users) || !payload.users.length) {
-      throw { code: 'FIREBASE_VERIFY_FAILED', message: 'Google authentication could not be verified.' };
-    }
-    const verified = payload.users[0];
-    const providerOk = Array.isArray(verified.providerUserInfo) && verified.providerUserInfo.some(p => p.providerId === 'google.com');
-    if (!providerOk || verified.emailVerified !== true || !verified.email) {
-      throw { code: 'GOOGLE_EMAIL_NOT_VERIFIED', message: 'A verified Google email address is required.' };
-    }
-    const email = String(verified.email).trim().toLowerCase();
+  // Sign in / register from a verified Google profile (the Google OAuth flow validates the profile first).
+  async function loginWithGoogleProfile({ sub, email, emailVerified, name = '', picture = '' }, { termsAccepted = false, termsVersion = '2026-09-29' } = {}) {
+    if (!sub || !email || emailVerified !== true) throw { code: 'GOOGLE_EMAIL_NOT_VERIFIED', message: 'A verified Google email address is required.' };
+    const mail = String(email).trim().toLowerCase(), gsub = String(sub);
     const users = await loadUsers();
-    let found = Object.values(users).find(u => String(u.firebase_uid || '') === String(verified.localId || '')) || Object.values(users).find(u => String(u.email || '').toLowerCase() === email);
+    let found = Object.values(users).find(u => String(u.google_sub || '') === gsub) || Object.values(users).find(u => String(u.email || '').toLowerCase() === mail);
+    // an email address that is already tied to a different Google account must never be taken over
+    if (found && found.google_sub && String(found.google_sub) !== gsub) throw { code: 'ACCOUNT_MISMATCH', message: 'This email address belongs to a different Google account.' };
     if (!found) {
       if (termsAccepted !== true) throw { code: 'TERMS_REQUIRED', message: 'You must agree to the Smartbase Terms & Conditions before creating an account.' };
-      const baseName = String(verified.displayName || email.split('@')[0] || 'user')
-        .toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 24) || 'user';
-      let username = baseName;
-      let suffix = 1;
-      while (Object.values(users).some(u => String(u.username || '').toLowerCase() === username.toLowerCase())) {
-        username = `${baseName}_${suffix++}`.slice(0, 32);
-      }
-      const id = generateId('sb_usr');
-      found = {
-        id, username, email, plan: 'free', created_at: new Date().toISOString(), databases: [],
-        auth_provider: 'google.com', firebase_uid: String(verified.localId || ''), email_verified: true,
-        terms_accepted: true, terms_version: termsVersion, terms_accepted_at: new Date().toISOString(),
-        display_name: verified.displayName || '', photo_url: verified.photoUrl || ''
-      };
+      const baseName = String(name || mail.split('@')[0] || 'user').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 24) || 'user';
+      let username = baseName, suffix = 1;
+      while (Object.values(users).some(u => String(u.username || '').toLowerCase() === username.toLowerCase())) username = `${baseName}_${suffix++}`.slice(0, 32);
+      const id = generateId('sb_usr'), now = new Date().toISOString();
+      found = { id, username, email: mail, plan: 'free', created_at: now, databases: [], auth_provider: 'google.com', google_sub: gsub, email_verified: true,
+        terms_accepted: true, terms_version: termsVersion, terms_accepted_at: now, display_name: name || '', photo_url: picture || '' };
       users[id] = found;
     } else {
-      found.email = email;
-      found.firebase_uid = String(verified.localId || found.firebase_uid || '');
-      found.auth_provider = 'google.com';
-      found.email_verified = true;
-      if (verified.displayName) found.display_name = verified.displayName;
-      if (verified.photoUrl) found.photo_url = verified.photoUrl;
+      found.email = mail; found.google_sub = gsub; found.auth_provider = 'google.com'; found.email_verified = true;
+      if (name) found.display_name = name;
+      if (picture) found.photo_url = picture;
       users[found.id] = found;
     }
     await saveUsers(users);
@@ -131,7 +102,10 @@ export function createAuthModule({ storage, env = {}, jwtSecret } = {}) {
     const { password: _, ...safe } = found;
     return { user: safe, token };
   }
+  // Short-lived signed values (for example the Google sign-in state); never accepted as a login session.
+  const signShort = (payload, audience, expiresIn) => jwt.sign(payload, effectiveSecret, { expiresIn, audience });
+  const verifyShort = (token, audience) => { try { return jwt.verify(token, effectiveSecret, { audience }); } catch { return null; } };
   function verifyToken(token) { try { return jwt.verify(token, effectiveSecret); } catch { return null; } }
-  return { generateId, registerUser, loginUser, loginWithFirebase, getUserById, verifyToken, loadUsers, saveUsers, deleteUserRecord };
+  return { generateId, registerUser, loginUser, loginWithGoogleProfile, signShort, verifyShort, getUserById, verifyToken, loadUsers, saveUsers, deleteUserRecord };
 }
 export function generateId(prefix) { const random = Math.random().toString(36).substring(2, 8) + Math.random().toString(36).substring(2, 8); return `${prefix}_${random}`; }

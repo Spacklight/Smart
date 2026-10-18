@@ -70,22 +70,34 @@ async function clearStaleServiceWorker() {
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
   if (await clearStaleServiceWorker()) return; // reloading; this load is done
-  try {
-    const hadPendingAuth = sessionStorage.getItem('smartbase_google_pending') === '1';
-    if (hadPendingAuth) setAuthLoading(true, 'Signing you in…', 'Google authentication is completing. Please wait.');
-    const redirectData = await window.smartbaseFirebase?.handleFirebaseRedirectResult();
-    if (redirectData?.token) {
-      currentToken = redirectData.token;
+  // Coming back from Google: ?signed_in=1 (success) or ?auth_error=<reason>
+  const params = new URLSearchParams(location.search);
+  const authError = params.get('auth_error'), signedIn = params.get('signed_in') === '1';
+  if (authError || signedIn) history.replaceState(null, '', location.pathname);
+  if (authError) {
+    const msg = AUTH_ERRORS[authError] || AUTH_ERRORS.server_error;
+    showToast(msg, 'error');
+    showAuth(authError === 'terms_required' ? 'register' : 'login');
+    const el = document.getElementById('authError'); if (el) { el.textContent = msg; el.classList.remove('hidden'); }
+  }
+  if (signedIn) {
+    try {
+      setAuthLoading(true, 'Signing you in…', 'Almost done.');
+      const res = await fetch('/api/v1/auth/session', { headers: { 'X-Smartbase-Client': 'web' }, credentials: 'same-origin' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.token) throw new Error(data.message || 'Sign-in could not be completed.');
+      currentToken = data.token;
       localStorage.setItem('smartbase_token', currentToken);
       hideAuth();
       await fetchUser();
       setAuthLoading(false);
+      showToast('Signed in successfully.', 'success');
       loadMonetization();
       return;
+    } catch (e) {
+      setAuthLoading(false);
+      showToast(e.message || 'Google authentication failed.', 'error');
     }
-  } catch (e) {
-    setAuthLoading(false);
-    showToast(e.message || 'Google authentication failed.', 'error');
   }
   const token = localStorage.getItem('smartbase_token');
   if (token) {
@@ -160,39 +172,31 @@ function toggleAuthUI() {
   if (!isRegister) document.getElementById('termsCheckbox').checked = false;
 }
 
-async function handleGoogleAuth() {
+const AUTH_ERRORS = {
+  cancelled: 'Google sign-in was cancelled.',
+  terms_required: 'No Smartbase account exists for this Google account yet. Tick the Terms box and choose Create account.',
+  email_not_verified: 'Your Google account needs a verified email address.',
+  account_mismatch: 'This email address belongs to a different Google account.',
+  state: 'The sign-in session expired. Please try again.',
+  not_configured: 'Google sign-in is not set up on the server yet.',
+  google_failed: 'Google could not complete the sign-in. Please try again.',
+  server_error: 'Something went wrong while signing you in. Please try again.'
+};
+
+function handleGoogleAuth() {
   const errorEl = document.getElementById('authError');
   errorEl.classList.add('hidden');
-  const button = document.querySelector('.google-auth-btn');
   const isRegister = authMode === 'register';
   if (isRegister && !document.getElementById('termsCheckbox').checked) {
     errorEl.textContent = 'Please agree to the Smartbase Terms & Conditions before creating your account.';
     errorEl.classList.remove('hidden');
     return;
   }
-  if (button) { button.disabled = true; button.classList.add('loading'); }
-  if (isRegister) sessionStorage.setItem('smartbase_terms_pending', '1');
-  setAuthLoading(true, isRegister ? 'Creating your account…' : 'Signing you in…', isRegister ? 'Google authentication is being completed. Please wait.' : 'Please wait while Smartbase completes authentication.');
-  try {
-    const data = await window.smartbaseFirebase.startGoogleAuth();
-    if (!data) return;
-    sessionStorage.removeItem('smartbase_terms_pending');
-    currentToken = data.token;
-    localStorage.setItem('smartbase_token', currentToken);
-    hideAuth();
-    await fetchUser();
-    setAuthLoading(false);
-    showToast(isRegister ? 'Your Smartbase account was created successfully.' : 'Signed in successfully.', 'success');
-  } catch (err) {
-    sessionStorage.removeItem('smartbase_terms_pending');
-    setAuthLoading(false);
-    errorEl.textContent = err.message || 'Google authentication failed.';
-    errorEl.classList.remove('hidden');
-    showToast(err.message || 'Google authentication failed.', 'error');
-  } finally {
-    if (button) { button.disabled = false; button.classList.remove('loading'); }
-  }
+  setAuthLoading(true, isRegister ? 'Creating your account…' : 'Signing you in…', 'Taking you to Google…');
+  window.location.href = '/api/v1/auth/google/start?mode=' + (isRegister ? 'register&terms=1' : 'login');
 }
+// If the browser's Back button returns from Google, do not stay on the loading screen.
+window.addEventListener('pageshow', (e) => { if (e.persisted) setAuthLoading(false); });
 
 async function handleAuth() { return handleGoogleAuth(); }
 
