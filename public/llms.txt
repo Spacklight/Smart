@@ -14,5 +14,5 @@
 ## Key facts
 - API base address: https://smartbase.de5.net/apiv1 (authenticate with `Authorization: Bearer <API key>`)
 - Web app: https://smartbase.de5.net
-- Limits (free plan): 20 databases, 50 tables per database, 500 tables total, 5 API keys, files up to 7 MB each and 500 MB per account, 20 API requests per minute and 2,000 per day
+- Limits (free plan): 20 databases, 50 tables per database, 500 tables total, 5 API keys, files up to 50 MB each and 1 GB free per account (or your own Backblaze B2 bucket), 20 API requests per minute and 2,000 per day
 - Company: Miyoni, contact emalawi19@gmail.com

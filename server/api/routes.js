@@ -425,6 +425,16 @@ export function createApiRouter({ storage, authModule, authMiddleware, apiKeys, 
       }
     });
 
+    // Real actions on a bound database: test the bucket, back the database up into it, list and download backups
+    const plusErr = (res, e) => {
+      const status = { DATABASE_NOT_FOUND: 404, NOT_BOUND: 409, CONNECTION_NOT_FOUND: 404, INVALID_BINDING: 400, BACKUP_TOO_LARGE: 413, EXTERNAL_FAILED: 502 }[e && e.code] || 500;
+      return res.status(status).json({ success: false, error: (e && e.code) || 'STORAGE_ERROR', message: (e && e.message) || 'Storage request failed' });
+    };
+    router.post('/storage/databases/:dbId/verify', authMiddleware, async (req, res) => { try { return res.json({ success: true, result: await plusStorage.verifyDatabaseBinding(req.userId, req.params.dbId) }); } catch (e) { return plusErr(res, e); } });
+    router.post('/storage/databases/:dbId/backup', authMiddleware, async (req, res) => { try { return res.status(201).json({ success: true, backup: await plusStorage.backupDatabase(req.userId, req.params.dbId) }); } catch (e) { return plusErr(res, e); } });
+    router.get('/storage/databases/:dbId/backups', authMiddleware, async (req, res) => { try { return res.json({ success: true, ...(await plusStorage.listDatabaseBackups(req.userId, req.params.dbId)) }); } catch (e) { return plusErr(res, e); } });
+    router.post('/storage/databases/:dbId/backups/download-url', authMiddleware, async (req, res) => { try { return res.json({ success: true, ...(await plusStorage.backupDownloadUrl(req.userId, req.params.dbId, (req.body || {}).key)) }); } catch (e) { return plusErr(res, e); } });
+
     router.get('/storage/connections', authMiddleware, async (req, res) => {
       try {
         const connections = await plusStorage.getConnections(req.userId);
@@ -590,42 +600,57 @@ export function createApiRouter({ storage, authModule, authMiddleware, apiKeys, 
 
   
   // ---- File storage (works with a browser session AND with an API key at /apiv1) ----
-  const fileService = createFileService({ storage, env });
+  const fileService = createFileService({ storage, env, plusStorage });
   const fileErr = (res, e) => {
-    const status = { INVALID_FILE_NAME: 400, INVALID_FILE: 400, FILE_NOT_FOUND: 404, FILE_TOO_LARGE: 413, STORAGE_QUOTA_EXCEEDED: 413 }[e.code] || 500;
-    return res.status(status).json({ success: false, error: e.code || 'FILE_ERROR', message: status === 500 ? (e.message || 'File operation failed') : e.message });
+    const status = { INVALID_FILE_NAME: 400, INVALID_FILE: 400, INVALID_PART: 400, USE_PARTS: 400, UPLOAD_NOT_FOUND: 400, NOT_BOUND: 409, USE_PRESIGN: 409, FILE_NOT_FOUND: 404, CONNECTION_NOT_FOUND: 404, FILE_TOO_LARGE: 413, STORAGE_QUOTA_EXCEEDED: 413, EXTERNAL_FAILED: 502 }[e.code] || 500;
+    return res.status(status).json({ success: false, error: e.code || 'FILE_ERROR', message: e.message || 'File operation failed' });
   };
-  router.get('/files', authMiddleware, async (req, res) => {
-    try { return res.json({ success: true, ...(await fileService.list(req.userId)) }); } catch (e) { return fileErr(res, e); }
-  });
-  router.get('/usage', authMiddleware, async (req, res) => {
-    try { return res.json({ success: true, files: await fileService.usage(req.userId) }); } catch (e) { return fileErr(res, e); }
-  });
-  // JSON upload: { "name": "report.pdf", "data": "<base64>", "content_type": "application/pdf" }
-  router.post('/files', authMiddleware, async (req, res) => {
-    try {
-      const { name, data, content_type } = req.body || {};
-      if (typeof data !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)) throw { code: 'INVALID_FILE', message: 'data must be a base64 string.' };
-      return res.status(201).json({ success: true, ...(await fileService.put(req.userId, name, Buffer.from(data, 'base64'), content_type)) });
-    } catch (e) { return fileErr(res, e); }
-  });
-  // Raw upload: PUT /files/<name> with the file bytes as the request body (no base64 needed)
-  router.put('/files/:name', authMiddleware, express.raw({ type: () => true, limit: '8mb' }), async (req, res) => {
-    try {
-      if (!Buffer.isBuffer(req.body)) throw { code: 'INVALID_FILE', message: 'Send the file bytes as the request body.' };
-      return res.status(201).json({ success: true, ...(await fileService.put(req.userId, req.params.name, req.body, req.headers['content-type'])) });
-    } catch (e) { return fileErr(res, e); }
-  });
-  router.get('/files/:name', authMiddleware, async (req, res) => {
-    try {
-      const { bytes, meta } = await fileService.get(req.userId, req.params.name);
-      res.set({ 'Content-Type': meta.content_type || 'application/octet-stream', 'Content-Disposition': 'attachment; filename="' + meta.name.replace(/"/g, '') + '"', 'Content-Length': String(bytes.length) });
-      return res.send(bytes);
-    } catch (e) { return fileErr(res, e); }
-  });
-  router.delete('/files/:name', authMiddleware, async (req, res) => {
-    try { return res.json({ success: true, ...(await fileService.remove(req.userId, req.params.name)) }); } catch (e) { return fileErr(res, e); }
-  });
+  const rawBody = express.raw({ type: () => true, limit: '6mb' });
+  const fileRoute = (fn) => async (req, res) => { try { return await fn(req, res); } catch (e) { return fileErr(res, e); } };
+  router.get('/files', authMiddleware, fileRoute(async (req, res) => res.json({ success: true, ...(await fileService.list(req.userId)) })));
+  router.get('/usage', authMiddleware, fileRoute(async (req, res) => res.json({ success: true, files: await fileService.usage(req.userId) })));
+  // JSON upload up to 5 MB: { "name": "report.pdf", "data": "<base64>", "content_type": "application/pdf" }
+  router.post('/files', authMiddleware, fileRoute(async (req, res) => {
+    const { name, data, content_type } = req.body || {};
+    if (typeof data !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)) throw { code: 'INVALID_FILE', message: 'data must be a base64 string.' };
+    return res.status(201).json({ success: true, ...(await fileService.put(req.userId, name, Buffer.from(data, 'base64'), content_type)) });
+  }));
+  // Raw upload up to 5 MB: PUT /files/<name> with the file bytes as the request body
+  router.put('/files/:name', authMiddleware, rawBody, fileRoute(async (req, res) => {
+    if (!Buffer.isBuffer(req.body)) throw { code: 'INVALID_FILE', message: 'Send the file bytes as the request body.' };
+    return res.status(201).json({ success: true, ...(await fileService.put(req.userId, req.params.name, req.body, req.headers['content-type'])) });
+  }));
+  // Large files (up to 50 MB): 5 MB parts, then "complete"
+  router.put('/files/:name/parts/:index', authMiddleware, rawBody, fileRoute(async (req, res) => {
+    if (!Buffer.isBuffer(req.body)) throw { code: 'INVALID_PART', message: 'Send the part bytes as the request body.' };
+    return res.json({ success: true, ...(await fileService.putPart(req.userId, req.params.name, Number(req.params.index), Number(req.query.total), Number(req.query.size), req.body)) });
+  }));
+  router.post('/files/:name/complete', authMiddleware, fileRoute(async (req, res) => {
+    const b = req.body || {};
+    return res.status(201).json({ success: true, ...(await fileService.complete(req.userId, req.params.name, { total: Number(b.total), size: Number(b.size), content_type: b.content_type })) });
+  }));
+  router.get('/files/:name/link', authMiddleware, fileRoute(async (req, res) => {
+    const r = await fileService.get(req.userId, req.params.name);
+    return res.json({ success: true, url: r.kind === 'redirect' ? r.url : null, storage: r.kind === 'redirect' ? 'b2' : 'smartbase' });
+  }));
+  router.get('/files/:name', authMiddleware, fileRoute(async (req, res) => {
+    const r = await fileService.get(req.userId, req.params.name);
+    if (r.kind === 'redirect') return res.redirect(302, r.url);
+    res.set({ 'Content-Type': r.meta.content_type || 'application/octet-stream', 'Content-Disposition': 'attachment; filename="' + r.meta.name.replace(/"/g, '') + '"', 'Content-Length': String(r.meta.size), 'Cache-Control': 'no-store' });
+    if (r.kind === 'bytes') return res.send(r.bytes);
+    try { // large file: send the stored parts one after another
+      for (let i = 0; i < r.count; i++) { const part = await r.readPart(i); await new Promise((ok, no) => res.write(part, (e) => (e ? no(e) : ok()))); }
+      return res.end();
+    } catch (e) { return res.headersSent ? res.destroy(e) : fileErr(res, e); }
+  }));
+  router.delete('/files/:name', authMiddleware, fileRoute(async (req, res) => res.json({ success: true, ...(await fileService.remove(req.userId, req.params.name)) })));
+  // Where files are stored: Smartbase free storage, or your own Backblaze B2 bucket
+  router.get('/files-storage', authMiddleware, fileRoute(async (req, res) => res.json({ success: true, ...(await fileService.storageInfo(req.userId)) })));
+  router.put('/files-storage', authMiddleware, fileRoute(async (req, res) => res.json({ success: true, ...(await fileService.setBinding(req.userId, req.body || {})) })));
+  router.post('/files-storage/presign', authMiddleware, fileRoute(async (req, res) => { const b = req.body || {}; return res.json({ success: true, ...(await fileService.presign(req.userId, { name: b.name, size: Number(b.size), content_type: b.content_type })) }); }));
+  router.post('/files-storage/complete', authMiddleware, fileRoute(async (req, res) => { const b = req.body || {}; return res.status(201).json({ success: true, ...(await fileService.completeExternal(req.userId, { name: b.name, size: Number(b.size), content_type: b.content_type })) }); }));
+  router.post('/files-storage/test', authMiddleware, fileRoute(async (req, res) => res.json({ success: true, ...(await fileService.testExternal(req.userId)) })));
+  router.post('/files-storage/test-cleanup', authMiddleware, fileRoute(async (req, res) => res.json({ success: true, ...(await fileService.cleanupTest(req.userId, (req.body || {}).key)) })));
 
   // ---- Open the Email platform without a second login (browser session only, never an API key) ----
   const emailLaunch = createEmailLaunch({ authModule, env });

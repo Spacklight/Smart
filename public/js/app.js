@@ -73,7 +73,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Coming back from Google: ?signed_in=1 (success) or ?auth_error=<reason>
   const params = new URLSearchParams(location.search);
   const authError = params.get('auth_error'), signedIn = params.get('signed_in') === '1';
-  if (authError || signedIn) history.replaceState(null, '', location.pathname);
+  if (params.get('open') === 'email') sessionStorage.setItem('smartbase_open_email', '1');
+  if (authError || signedIn || params.has('open')) history.replaceState(null, '', location.pathname);
   if (authError) {
     const msg = AUTH_ERRORS[authError] || AUTH_ERRORS.server_error;
     showToast(msg, 'error');
@@ -93,6 +94,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       setAuthLoading(false);
       showToast('Signed in successfully.', 'success');
       loadMonetization();
+      await continueToEmail();
       return;
     } catch (e) {
       setAuthLoading(false);
@@ -103,6 +105,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (token) {
     currentToken = token;
     await fetchUser();
+    await continueToEmail();
+  } else if (sessionStorage.getItem('smartbase_open_email') === '1') {
+    showAuth('login');
   }
   loadMonetization();
 });
@@ -128,6 +133,7 @@ async function fetchUser() {
   try {
     const data = await api('/auth/me');
     currentUser = data.user;
+    document.body.dataset.authed = 'true';
     document.getElementById('userDisplay').textContent = `${currentUser.username} • ${currentUser.plan} plan`;
     document.getElementById('landingPage').classList.add('hidden');
     document.getElementById('mainApp').classList.remove('hidden');
@@ -204,6 +210,7 @@ function logout() {
   localStorage.removeItem('smartbase_token');
   currentToken = null;
   currentUser = null;
+  delete document.body.dataset.authed;
   document.getElementById('mainApp').classList.add('hidden');
   document.getElementById('landingPage').classList.remove('hidden');
   fetch('/api/v1/auth/logout', { method: 'POST' });
@@ -786,34 +793,49 @@ function escapeHtml(v) {
 }
 
 
-// Opens the Email platform in a new tab, already signed in (no second login or registration).
-async function openEmailPlatform() {
-  const tab = window.open('', '_blank');
+// Opens the Email platform already signed in (no second login or registration).
+async function openEmailPlatform(sameTab = false) {
+  const tab = sameTab ? null : window.open('', '_blank');
   try {
     const data = await api('/integrations/email/launch', { method: 'POST', body: JSON.stringify({}) });
-    if (tab) { tab.opener = null; tab.location.href = data.url; } else window.location.href = data.url;
+    let opened = false;
+    if (tab && !tab.closed) { try { tab.location.replace(data.url); opened = true; } catch (_) { /* some browsers refuse; use this tab */ } }
+    if (!opened) window.location.href = data.url;
   } catch (e) {
-    if (tab) tab.close();
+    if (tab && !tab.closed) tab.close();
     showToast(e.message || 'Could not open the Email platform.', 'error');
   }
 }
+// The Email platform sends people here (?open=email) when they are not signed in there yet.
+async function continueToEmail() {
+  if (sessionStorage.getItem('smartbase_open_email') !== '1' || !currentUser) return false;
+  sessionStorage.removeItem('smartbase_open_email');
+  await openEmailPlatform(true);
+  return true;
+}
 
 function fmtBytes(n) { const u = ['B','KB','MB','GB']; let i = 0; n = Number(n) || 0; while (n >= 1024 && i < 3) { n /= 1024; i++; } return n.toFixed(i ? 2 : 0) + ' ' + u[i]; }
+const FILE_CHUNK = 5 * 1024 * 1024, FILE_MAX = 50 * 1024 * 1024;
+let filesBinding = { mode: 'smartbase' };
 
 async function renderFiles() {
   const content = document.getElementById('content');
   content.innerHTML = `<div>Loading...</div>`;
   try {
     const data = await api('/files');
-    const u = data.usage, pct = u.quota ? Math.min(100, (u.used / u.quota) * 100) : 0;
-    const color = pct > 95 ? 'var(--error, #ef4444)' : pct > 80 ? 'var(--warning, #f59e0b)' : 'var(--accent, #00d4ff)';
+    const u = data.usage, ext = (data.binding || {}).mode === 'b2';
+    filesBinding = data.binding || { mode: 'smartbase' };
+    const pct = u.quota ? Math.min(100, (u.used / u.quota) * 100) : 0;
     content.innerHTML = `
       <h2>📎 Files</h2>
-      <p style="color:var(--text-secondary);margin:.5rem 0 1.5rem;">Store files (images, PDFs, documents) and use them from your own apps with an API key. Upload with a write key, download and list with a read key.</p>
+      <p style="color:var(--text-secondary);margin:.5rem 0 1.5rem;">Store files up to ${fmtBytes(u.max_file_bytes)} each. Use them from your own apps with an API key: upload with a write key, download and list with a read key.</p>
       <div class="card" style="margin-bottom:1.25rem;">
-        <div class="card-header"><span class="card-title">File storage</span><span class="badge">Free plan</span></div>
-        <div style="margin-top:.75rem;font-size:.9rem;">${fmtBytes(u.used)} used of ${fmtBytes(u.quota)} (${fmtBytes(u.remaining)} left) • max ${fmtBytes(u.max_file_bytes)} per file</div>
-        <div style="height:8px;background:var(--bg-secondary);border-radius:6px;overflow:hidden;margin-top:.6rem;"><div style="height:100%;width:${Math.max(pct, u.used ? 1 : 0)}%;background:${color};"></div></div>
+        <div class="card-header"><span class="card-title">Storage location</span><span class="badge">${ext ? 'Your Backblaze B2 bucket' : 'Smartbase free storage'}</span></div>
+        ${ext
+          ? `<div style="margin-top:.75rem;font-size:.9rem;">New files go straight to your own bucket and do not use your free ${fmtBytes(u.quota)}.</div>`
+          : `<div style="margin-top:.75rem;font-size:.9rem;">${fmtBytes(u.used)} used of ${fmtBytes(u.quota)} (${fmtBytes(u.remaining)} left)</div>
+             <div class="up-bar" style="margin-top:.6rem;"><div class="up-fill" style="width:${Math.max(pct, u.used ? 1 : 0)}%;"></div></div>`}
+        <button class="btn" style="margin-top:.9rem;" onclick="window.smartbaseStoragePanel && window.smartbaseStoragePanel('files')">${ext ? 'Change storage location' : 'Use my own Backblaze B2 bucket'}</button>
       </div>
       <div class="card" style="margin-bottom:1.25rem;">
         <h3>Upload a file</h3>
@@ -821,37 +843,107 @@ async function renderFiles() {
           <input id="fileInput" type="file" class="form-input" style="flex:1;min-width:220px;">
           <button class="btn btn-primary" id="fileUploadBtn" onclick="uploadFile()">Upload</button>
         </div>
+        <div id="upCard" class="up-card hidden"><div class="up-head"><span id="upName"></span><strong id="upPct">0%</strong></div><div class="up-bar"><div id="upFill" class="up-fill busy"></div></div><div class="up-sub" id="upSub"></div></div>
       </div>
-      <div class="table-container"><table class="data-table"><thead><tr><th>Name</th><th>Size</th><th>Type</th><th>Uploaded</th><th>Actions</th></tr></thead><tbody>
-        ${data.files.length ? data.files.map(f => `<tr><td class="mono">${escapeHtml(f.name)}</td><td>${fmtBytes(f.size)}</td><td>${escapeHtml(f.content_type || '')}</td><td>${escapeHtml((f.created_at || '').slice(0, 10))}</td>
-          <td><button class="btn" style="padding:.25rem .5rem;font-size:.75rem;" data-name="${escapeHtml(f.name)}" onclick="downloadFile(this.dataset.name)">Download</button>
+      <div class="table-container"><table class="data-table"><thead><tr><th>Name</th><th>Size</th><th>Location</th><th>Type</th><th>Uploaded</th><th>Actions</th></tr></thead><tbody>
+        ${data.files.length ? data.files.map(f => `<tr><td class="mono">${escapeHtml(f.name)}</td><td>${fmtBytes(f.size)}</td><td><span class="file-badge ${f.storage === 'b2' ? 'b2' : ''}">${f.storage === 'b2' ? 'Backblaze B2' : 'Smartbase'}</span></td><td>${escapeHtml(f.content_type || '')}</td><td>${escapeHtml((f.created_at || '').slice(0, 10))}</td>
+          <td><button class="btn" style="padding:.25rem .5rem;font-size:.75rem;" data-name="${escapeHtml(f.name)}" data-ext="${f.storage === 'b2' ? 1 : 0}" onclick="downloadFile(this.dataset.name, this.dataset.ext === '1')">Download</button>
           <button class="btn" style="padding:.25rem .5rem;font-size:.75rem;" data-name="${escapeHtml(f.name)}" onclick="deleteFile(this.dataset.name)">Delete</button></td></tr>`).join('')
-          : `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">No files yet.</td></tr>`}
+          : `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No files yet.</td></tr>`}
       </tbody></table></div>`;
   } catch (e) {
     content.innerHTML = `<div class="card"><h3>Could not load files</h3><p class="muted-copy">${escapeHtml(e.message || 'Please try again.')}</p></div>`;
   }
 }
 
+function showProgress(name, pct, sub, busy = true) {
+  const card = document.getElementById('upCard'); if (!card) return;
+  card.classList.remove('hidden');
+  document.getElementById('upName').textContent = name;
+  document.getElementById('upPct').textContent = Math.round(pct) + '%';
+  const fill = document.getElementById('upFill'); fill.style.width = Math.max(0, Math.min(100, pct)) + '%'; fill.classList.toggle('busy', busy);
+  document.getElementById('upSub').textContent = sub || '';
+}
+function hideProgress() { const c = document.getElementById('upCard'); if (c) c.classList.add('hidden'); }
+
+// XMLHttpRequest, because it reports upload progress
+function xhrSend(method, url, body, headers, onProgress) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open(method, url);
+    Object.entries(headers || {}).forEach(([k, v]) => x.setRequestHeader(k, v));
+    if (x.upload && onProgress) x.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded); };
+    x.onload = () => resolve({ status: x.status, text: x.responseText });
+    x.onerror = () => reject(new Error('NETWORK'));
+    x.send(body);
+  });
+}
+const authHeaders = (extra) => ({ Authorization: `Bearer ${currentToken}`, ...(extra || {}) });
+const apiError = (r) => { try { return JSON.parse(r.text).message || 'Upload failed.'; } catch (_) { return 'Upload failed (' + r.status + ').'; } };
+
+async function sendPart(url, blob, onLoaded) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const r = await xhrSend('PUT', url, blob, authHeaders({ 'Content-Type': 'application/octet-stream' }), onLoaded);
+      if (r.status >= 200 && r.status < 300) return;
+      if (r.status < 500 || attempt >= 3) throw new Error(apiError(r));
+    } catch (e) { if (e.message !== 'NETWORK' || attempt >= 3) throw e; }
+    await new Promise((ok) => setTimeout(ok, 800 * attempt));
+  }
+}
+
 async function uploadFile() {
   const input = document.getElementById('fileInput'), file = input && input.files[0];
   if (!file) return showToast('Choose a file first.', 'warning');
-  if (file.size > 7 * 1024 * 1024) return showToast('File too large (max 7 MB per file).', 'warning');
+  if (!file.size) return showToast('That file is empty.', 'warning');
+  if (file.size > FILE_MAX) return showToast(`File too large (max ${fmtBytes(FILE_MAX)}).`, 'warning');
   const btn = document.getElementById('fileUploadBtn'); btn.disabled = true; btn.textContent = 'Uploading...';
+  const type = file.type || 'application/octet-stream', enc = encodeURIComponent(file.name);
   try {
-    const b64 = await new Promise((resolve, reject) => { const r = new FileReader(); r.onerror = () => reject(new Error('Could not read the file.')); r.onload = () => resolve(String(r.result).split(',')[1] || ''); r.readAsDataURL(file); });
-    await api('/files', { method: 'POST', body: JSON.stringify({ name: file.name, data: b64, content_type: file.type || 'application/octet-stream' }) });
-    showToast('File uploaded.', 'success'); renderFiles();
-  } catch (e) { showToast(e.message || 'Upload failed.', 'error'); btn.disabled = false; btn.textContent = 'Upload'; }
+    showProgress(file.name, 0, 'Starting…');
+    if (filesBinding.mode === 'b2') {
+      const pre = await api('/files-storage/presign', { method: 'POST', body: JSON.stringify({ name: file.name, size: file.size, content_type: type }) });
+      let r;
+      try { r = await xhrSend('PUT', pre.url, file, pre.headers, (l) => showProgress(file.name, (l / file.size) * 100, `${fmtBytes(l)} of ${fmtBytes(file.size)} → your Backblaze bucket`)); }
+      catch (e) { throw new Error('The upload to your bucket was blocked. Your bucket probably needs a CORS rule: open External Storage → File Storage and press "Test direct upload".'); }
+      if (r.status < 200 || r.status >= 300) throw new Error('Your bucket refused the upload (' + r.status + ').');
+      await api('/files-storage/complete', { method: 'POST', body: JSON.stringify({ name: file.name, size: file.size, content_type: type }) });
+    } else if (file.size <= FILE_CHUNK) {
+      const r = await xhrSend('PUT', `/api/v1/files/${enc}`, file, authHeaders({ 'Content-Type': type }), (l) => showProgress(file.name, (l / file.size) * 100, `${fmtBytes(l)} of ${fmtBytes(file.size)}`));
+      if (r.status < 200 || r.status >= 300) throw new Error(apiError(r));
+    } else {
+      const total = Math.ceil(file.size / FILE_CHUNK);
+      for (let i = 0; i < total; i++) {
+        const start = i * FILE_CHUNK, blob = file.slice(start, Math.min(file.size, start + FILE_CHUNK));
+        await sendPart(`/api/v1/files/${enc}/parts/${i}?total=${total}&size=${file.size}`, blob, (l) => showProgress(file.name, ((start + l) / file.size) * 100, `Part ${i + 1} of ${total} · ${fmtBytes(start + l)} of ${fmtBytes(file.size)}`));
+      }
+      showProgress(file.name, 100, 'Finishing…', false);
+      await api(`/files/${enc}/complete`, { method: 'POST', body: JSON.stringify({ total, size: file.size, content_type: type }) });
+    }
+    showProgress(file.name, 100, 'Done', false);
+    showToast('File uploaded.', 'success');
+    setTimeout(renderFiles, 600);
+  } catch (e) {
+    hideProgress();
+    showToast(e.message || 'Upload failed.', 'error');
+    btn.disabled = false; btn.textContent = 'Upload';
+  }
 }
 
-async function downloadFile(name) {
+async function downloadFile(name, external) {
   try {
-    const res = await fetch(`/api/v1/files/${encodeURIComponent(name)}`, { headers: { Authorization: `Bearer ${currentToken}` } });
+    const url = `/api/v1/files/${encodeURIComponent(name)}`;
+    if (external) { const r = await api(`/files/${encodeURIComponent(name)}/link`); if (r.url) { window.open(r.url, '_blank', 'noopener'); return; } }
+    const res = await fetch(url, { headers: authHeaders() });
     if (!res.ok) throw new Error('Download failed.');
-    const blob = await res.blob(), a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
-  } catch (e) { showToast(e.message || 'Download failed.', 'error'); }
+    const total = Number(res.headers.get('Content-Length')) || 0, chunks = []; let got = 0;
+    if (res.body && res.body.getReader && total > FILE_CHUNK) {
+      const reader = res.body.getReader();
+      for (;;) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); got += value.length; showProgress(name, (got / total) * 100, `Downloading ${fmtBytes(got)} of ${fmtBytes(total)}`); }
+    } else chunks.push(new Uint8Array(await res.arrayBuffer()));
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(chunks)); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    hideProgress();
+  } catch (e) { hideProgress(); showToast(e.message || 'Download failed.', 'error'); }
 }
 
 async function deleteFile(name) {
@@ -897,8 +989,8 @@ async function renderAPI() {
         <div><strong>20</strong><div class="muted-copy">API requests/minute</div></div>
         <div><strong>5</strong><div class="muted-copy">API keys/account</div></div>
         <div><strong>2 MB</strong><div class="muted-copy">API request body</div></div>
-        <div><strong>7 MB</strong><div class="muted-copy">per uploaded file</div></div>
-        <div><strong>500 MB</strong><div class="muted-copy">file storage/account</div></div>
+        <div><strong>50 MB</strong><div class="muted-copy">per uploaded file</div></div>
+        <div><strong>1 GB</strong><div class="muted-copy">free file storage/account</div></div>
       </div>
     </div>
     <div class="card" style="margin-bottom:1.25rem;">
@@ -981,8 +1073,18 @@ curl ${escapeHtml(base)}/files -H "Authorization: Bearer YOUR_READ_KEY"
 
 # download (read key)
 curl -o photo.jpg ${escapeHtml(base)}/files/photo.jpg \
-  -H "Authorization: Bearer YOUR_READ_KEY"</pre>
-      <p class="muted-copy" style="margin-top:.75rem;">Files up to 7 MB each, 500 MB per account. Uploads and downloads count toward your API request limits.</p>
+  -H "Authorization: Bearer YOUR_READ_KEY"
+
+# files over 5 MB (up to 50 MB): send 5 MB parts, then complete
+SIZE=$(stat -c%s big.zip); TOTAL=$(( (SIZE + 5242879) / 5242880 ))
+split -b 5242880 -d big.zip part_
+curl -X PUT "${escapeHtml(base)}/files/big.zip/parts/0?total=$TOTAL&size=$SIZE" \\
+  -H "Authorization: Bearer YOUR_WRITE_KEY" --data-binary @part_00
+# ...repeat for part_01 (index 1), part_02 (index 2) ...
+curl -X POST ${escapeHtml(base)}/files/big.zip/complete \\
+  -H "Authorization: Bearer YOUR_WRITE_KEY" -H "Content-Type: application/json" \\
+  -d '{"total":'$TOTAL',"size":'$SIZE',"content_type":"application/zip"}'</pre>
+      <p class="muted-copy" style="margin-top:.75rem;">Files up to 50 MB each (1 GB free storage, or unlimited in your own Backblaze bucket). Files over 5 MB are sent in 5 MB parts. Uploads and downloads count toward your API request limits.</p>
     </div>
     <div class="card" style="margin-top:1.25rem;">
       <h3>Advanced SQL</h3>
@@ -1174,8 +1276,8 @@ async function renderSettings() {
           <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;"><span>Total Tables</span><span id="settingsTableLimit">- / 500</span></div>
           <div class="progress"><div class="progress-fill" id="settingsTableProg"></div></div>
           <div style="margin-top:1rem; line-height:1.8; color:var(--text-secondary);">
-            <div>File storage: <strong>500 MB/user</strong></div>
-            <div>Maximum file upload: <strong>25 MB</strong></div>
+            <div>File storage: <strong>1 GB/user</strong></div>
+            <div>Maximum file upload: <strong>50 MB</strong></div>
             <div>API usage: <strong>2,000/day</strong>, <strong>20/minute</strong></div>
             <div>API keys: <strong>5/account</strong></div>
             <div>API request body: <strong>2 MB</strong></div>

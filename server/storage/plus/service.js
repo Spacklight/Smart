@@ -415,6 +415,64 @@ export class PlusStorageService {
     );
   }
 
+  // ---- Actions that prove a database really is bound to the bucket ----
+  async _boundAdapter(userId, dbId) {
+    const database = await this.storage.getDatabase(userId, dbId);
+    if (!database) throw { code: 'DATABASE_NOT_FOUND', message: 'Database not found' };
+    const binding = await this.storage.getDatabaseStorageBinding(userId, dbId);
+    if (!binding) throw { code: 'NOT_BOUND', message: 'This database is not bound to external storage yet.' };
+    let adapter;
+    try { adapter = await this.createAdapter(userId, binding.connectionId); }
+    catch (e) { throw { code: 'CONNECTION_NOT_FOUND', message: 'The storage connection for this database no longer exists.' }; }
+    return { database, binding, adapter };
+  }
+  _extErr(e) { return e && e.code ? e : { code: 'EXTERNAL_FAILED', message: `Your storage provider did not accept the request (${(e && (e.name || e.Code)) || 'error'}). Check the bucket and keys.` }; }
+
+  /** Writes, finds and deletes a test object in the bucket, and records when it last worked. */
+  async verifyDatabaseBinding(userId, dbId) {
+    const { binding, adapter } = await this._boundAdapter(userId, dbId), t0 = Date.now();
+    const key = `${binding.prefix}.smartbase-check/${crypto.randomUUID()}.txt`;
+    try {
+      await adapter.upload(key, 'smartbase check ' + new Date().toISOString(), 'text/plain');
+      const found = (await adapter.list(key, 1)).objects.find((o) => o.key === key);
+      await adapter.delete(key);
+      if (!found) throw { code: 'EXTERNAL_FAILED', message: 'The test file was written but not found in your bucket.' };
+      const result = { ok: true, ms: Date.now() - t0, wrote_bytes: found.size, steps: ['wrote a test file', 'found it in the bucket', 'deleted it'], verified_at: new Date().toISOString() };
+      await this.storage.saveDatabaseStorageBinding(userId, dbId, { ...binding, last_verified_at: result.verified_at, last_verified_ms: result.ms });
+      return result;
+    } catch (e) { throw this._extErr(e); }
+  }
+
+  /** Saves a full copy of the database (every table and record) into the bound bucket. */
+  async backupDatabase(userId, dbId) {
+    const { database, binding, adapter } = await this._boundAdapter(userId, dbId);
+    const list = (await this.storage.hf.readFile(this.storage.databaseTablesPath(userId, dbId))) || [], tables = [];
+    for (const entry of list) {
+      const meta = await this.storage.getTable(userId, dbId, entry.id); if (!meta) continue;
+      tables.push({ name: meta.name, columns: meta.columns, engine: meta.engine || null, records: await this.storage.getRecords(userId, dbId, meta.id) });
+    }
+    const created = new Date().toISOString();
+    const body = JSON.stringify({ format: 'smartbase-backup-v1', created_at: created, database: { id: dbId, name: database.name }, tables });
+    if (body.length > 40 * 1024 * 1024) throw { code: 'BACKUP_TOO_LARGE', message: 'This database is too large to back up in one file.' };
+    const key = `${binding.prefix}backups/${created.replace(/[:.]/g, '-')}.json`;
+    try { await adapter.upload(key, body, 'application/json'); } catch (e) { throw this._extErr(e); }
+    const result = { key, bytes: Buffer.byteLength(body), tables: tables.length, records: tables.reduce((a, t) => a + t.records.length, 0), created_at: created };
+    await this.storage.saveDatabaseStorageBinding(userId, dbId, { ...binding, last_backup_at: created, last_backup_key: key, last_backup_bytes: result.bytes });
+    return result;
+  }
+  async listDatabaseBackups(userId, dbId) {
+    const { binding, adapter } = await this._boundAdapter(userId, dbId);
+    try {
+      const r = await adapter.list(`${binding.prefix}backups/`, 100);
+      return { backups: r.objects.map((o) => ({ key: o.key, bytes: o.size, created_at: o.lastModified })).sort((a, b) => (a.key < b.key ? 1 : -1)), truncated: r.truncated };
+    } catch (e) { throw this._extErr(e); }
+  }
+  async backupDownloadUrl(userId, dbId, key) {
+    const { binding, adapter } = await this._boundAdapter(userId, dbId);
+    if (!String(key).startsWith(`${binding.prefix}backups/`) || String(key).includes('..')) throw { code: 'INVALID_BINDING', message: 'Invalid backup key.' };
+    try { return { url: (await adapter.createDownloadUrl(String(key), 600, String(key).split('/').pop())).url }; } catch (e) { throw this._extErr(e); }
+  }
+
   async createDownloadUrl(
     userId,
     connectionId,

@@ -8,15 +8,16 @@ export async function createApp(env = {}) {
   const app = express();
 
   // Same-origin: frontend and API same Cloudflare origin, no wildcard CORS with credentials
-  // 2 MB for normal API bodies. File endpoints are special: JSON uploads may carry a base64 file (up to ~7 MB),
-  // and PUT /files/:name is a raw body parsed by its own route.
-  const jsonSmall = express.json({ limit: '2mb' }), jsonFiles = express.json({ limit: '11mb' }), form = express.urlencoded({ extended: true });
+  // 2 MB for normal API bodies. File endpoints are special: a JSON upload may carry a base64 file (up to 5 MB),
+  // and PUT /files/... is a raw body that the route parses itself.
+  const jsonSmall = express.json({ limit: '2mb' }), jsonFiles = express.json({ limit: '9mb' }), form = express.urlencoded({ extended: true });
+  const isRawFilePut = (req) => req.method === 'PUT' && /\/files\/.+$/.test(req.path);
   app.use((req, res, next) => {
-    if (req.method === 'PUT' && /\/files\/[^/]+$/.test(req.path)) return next();
+    if (isRawFilePut(req)) return next();
     if (req.method === 'POST' && /\/files\/?$/.test(req.path)) return jsonFiles(req, res, next);
     return jsonSmall(req, res, next);
   });
-  app.use((req, res, next) => (req.method === 'PUT' && /\/files\/[^/]+$/.test(req.path) ? next() : form(req, res, next)));
+  app.use((req, res, next) => (isRawFilePut(req) ? next() : form(req, res, next)));
   app.use(cookieParser());
 
   // /apiv1 is authenticated by API key (never by cookie), so it is safe to let

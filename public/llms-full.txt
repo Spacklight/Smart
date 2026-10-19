@@ -18,7 +18,7 @@ A world where anyone with an idea can build a reliable, real application using s
 ## Products and services
 - **Smartbase Databases** - create databases and tables, browse records, and run SQL with joins, grouping, subqueries, views, indexes, constraints and transactions.
 - **Smartbase REST API** - read, write and collective API keys, pagination, structured errors and usage limits. Base address: `https://smartbase.de5.net/apiv1`.
-- **Smartbase Files** - upload, download and manage files from the dashboard or with an API key.
+- **Smartbase Files** - upload, download and manage files (up to 50 MB each, 1 GB free) from the dashboard or with an API key, or send them to your own Backblaze B2 bucket.
 - **Auth & Email** - Google sign-in for your own websites, flexible storage for your users, one-account-one-device control, and email broadcasts with delivery and open tracking.
 - **Documentation** - full guides and API reference at [https://smartbase.de5.net/docs](https://smartbase.de5.net/docs).
 
@@ -87,7 +87,10 @@ All paths below are relative to `https://smartbase.de5.net/apiv1`. Every respons
 | DELETE | `.../records/:recordId` | write | Delete a record |
 | POST | `/query` | read or write | Run SQL (`database_id`, `sql`) |
 | GET | `/files` and `/files/:name` | read | List or download files |
-| PUT / POST / DELETE | `/files` | write | Upload or delete files |
+| PUT | `/files/:name` | write | Upload a file up to 5 MB (raw bytes) |
+| PUT | `/files/:name/parts/:index?total=N&size=S` | write | Upload one 5 MB part of a larger file |
+| POST | `/files/:name/complete` | write | Finish a multi-part upload |
+| POST / DELETE | `/files`, `/files/:name` | write | Upload JSON (base64) or delete a file |
 | GET | `/usage` | read | File storage used and remaining |
 
 Column types are `INTEGER`, `FLOAT`, `TEXT`, `BOOLEAN`, `DATE`, `DATETIME` and `JSON`. Example table and record:
@@ -125,13 +128,15 @@ curl -X PUT https://smartbase.de5.net/apiv1/files/photo.jpg -H "Authorization: B
 curl https://smartbase.de5.net/apiv1/files -H "Authorization: Bearer READ_KEY"
 curl -o photo.jpg https://smartbase.de5.net/apiv1/files/photo.jpg -H "Authorization: Bearer READ_KEY"
 ```
-Files can also be uploaded as JSON (`POST /files` with `name`, base64 `data` and `content_type`). Maximum 7 MB per file and 500 MB per account.
+Files over 5 MB (up to 50 MB) are sent in parts of exactly 5 MB (the last part is smaller): `PUT /files/NAME/parts/INDEX?total=N&size=SIZE` for each part, then `POST /files/NAME/complete` with `total`, `size` and `content_type`. The dashboard does this for you and shows a progress bar. Files can also be uploaded as JSON (`POST /files` with `name`, base64 `data` and `content_type`, up to 5 MB).
+
+You can also send your files to your **own Backblaze B2 bucket** (External Storage in the dashboard). Then uploads go straight to your bucket and do not use the free storage.
 
 ## Limits (free plan)
 - 20 databases, 50 tables per database, 500 tables in total.
 - 5 API keys per account.
 - 2 MB request body for normal API calls.
-- Files: 7 MB per file, 500 MB per account.
+- Files: 50 MB per file, 1 GB free storage per account (files in your own Backblaze bucket are not counted).
 - API keys are limited to 20 requests per minute and 2,000 requests per day. When you reach a limit the API answers `429` with `RATE_LIMIT_EXCEEDED` and a retry time.
 
 ## Errors
@@ -145,7 +150,7 @@ Errors look like `{"success": false, "error": "CODE", "message": "Explanation"}`
 | `DATABASE_NOT_FOUND`, `TABLE_NOT_FOUND` | The id does not exist or is not yours |
 | `INVALID_SQL`, `SQL_ERROR` | The SQL could not be parsed or failed (nothing was saved) |
 | `DATABASE_LIMIT_REACHED`, `TABLE_LIMIT_REACHED` | A free-plan limit was reached |
-| `FILE_TOO_LARGE`, `STORAGE_QUOTA_EXCEEDED` | File limits were reached |
+| `FILE_TOO_LARGE`, `STORAGE_QUOTA_EXCEEDED`, `INVALID_PART` | File limits were reached, or a part had the wrong size |
 
 ## Auth and Email platform
 The Auth & Email platform lets visitors of **your** website sign in with Google, and gives you tools to manage those users. Open it from the **Auth & Email** option in the Smartbase menu; you are signed in automatically. It currently runs at https://email.emalawi19.workers.dev.

@@ -157,3 +157,15 @@ body { font-family: Inter, -apple-system, sans-serif; background: var(--bg); col
 [data-theme="light"] .line-numbers { background:#eaeef2; color:#8c959f; }
 [data-theme="light"] .sql-textarea { color:#1f2328; }
 .muted-copy { color:var(--text-secondary); font-size:.85rem; }
+
+/* ---- Neon mint upload / download progress ---- */
+.up-card{margin:1rem 0;padding:1rem 1.1rem;border:1px solid rgba(45,255,176,.35);border-radius:12px;background:rgba(45,255,176,.05)}
+.up-head{display:flex;justify-content:space-between;gap:12px;font-size:.9rem;margin-bottom:.55rem;word-break:break-all}
+.up-head strong{color:#2dffb0;font-variant-numeric:tabular-nums;text-shadow:0 0 10px rgba(45,255,176,.55)}
+.up-bar{height:12px;border-radius:99px;background:rgba(127,127,127,.2);overflow:hidden}
+.up-fill{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#1fe39c,#2dffb0 55%,#7dffd0);box-shadow:0 0 10px #2dffb0,0 0 22px rgba(45,255,176,.6);transition:width .15s ease}
+.up-fill.busy{animation:upPulse 1.1s ease-in-out infinite}
+@keyframes upPulse{50%{filter:brightness(1.25)}}
+.up-sub{margin-top:.45rem;font-size:.8rem;color:var(--text-muted,#8a93a6)}
+.file-badge{display:inline-block;padding:.1rem .5rem;border-radius:99px;font-size:.72rem;border:1px solid var(--border,#2a3350)}
+.file-badge.b2{border-color:#2dffb0;color:#2dffb0}

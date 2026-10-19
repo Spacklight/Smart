@@ -1,4 +1,7 @@
 
+/* only for signed-in users (app.js sets body[data-authed]) */
+#smartbase-storage-launcher{display:none}
+body[data-authed="true"] #smartbase-storage-launcher{display:block}
 #smartbase-storage-launcher{
   position:fixed;right:20px;bottom:20px;z-index:9998;
   border:0;border-radius:14px;padding:12px 18px;

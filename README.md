@@ -25,7 +25,7 @@ Hugging Face Dataset Storage (or Local Mock)
 - **5 databases** per free account, **10 tables** per database (enforced server-side)
 - **Hugging Face persistence** - all data survives restarts
 - **SQL engine (tastdone)**: multi-statement scripts, CREATE/ALTER/DROP TABLE, views and indexes, INSERT (multi-row, INSERT...SELECT, ON DUPLICATE KEY UPDATE), UPDATE/DELETE with expressions, SELECT with all JOINs, GROUP BY/HAVING, subqueries, WITH (recursive), UNION/INTERSECT/EXCEPT, CASE/CAST, 60+ functions, PRIMARY KEY/UNIQUE/NOT NULL/DEFAULT/CHECK/AUTO_INCREMENT, BEGIN/COMMIT/ROLLBACK. Platform statements CREATE/SHOW/DROP DATABASE still work.
-- **Files**: per-account file storage (up to 7 MB per file, 500 MB per account) usable from the dashboard and with API keys (`/apiv1/files`).
+- **Files**: per-account file storage (up to 50 MB per file, 1 GB free per account, or your own Backblaze B2 bucket) usable from the dashboard and with API keys (`/apiv1/files`).
 - **Supported Types**: INTEGER, FLOAT, TEXT, BOOLEAN, DATE, DATETIME, JSON
 - **User Isolation**: Every request verifies ownership - User A cannot access User B
 - **REST API**: Full CRUD + SQL endpoint
@@ -201,13 +201,19 @@ Smartbase signs users in with Google using its own OAuth client (authorization-c
 - Google login/account creation shows a full-screen loading state through redirect authentication.
 - Light/dark theme toggle is available and persisted in the browser.
 - API Center uses a key icon.
-- Free-plan limits: 20 databases, 50 tables/database, 500 total tables, 500 MB/user target file storage, 25 MB maximum file upload, 5 API keys/account, 2 MB API request body.
+- Free-plan limits: 20 databases, 50 tables/database, 500 total tables, 1 GB/user file storage, 50 MB maximum file upload, 5 API keys/account, 2 MB API request body.
 - API-key traffic is rate-limited to 20 requests/minute and 2,000 requests/day per user within each running application instance.
 
 ### File-storage note
 Files are available at `/api/v1/files` (browser session) and `/apiv1/files` (API key): `GET /files`, `GET /files/:name`, `PUT /files/:name` (raw bytes), `POST /files` (JSON with base64 `data`), `DELETE /files/:name`, `GET /usage`. Read keys can list/download; write keys can upload/delete.
 
-Hugging Face rejects raw binary files in plain commits, so each file is stored as a JSON document holding the bytes as base64 (`users/<id>/files/<name>.json`). That limits a file to about 7 MB. The 25 MB per-file target needs a different backend (Hugging Face Xet/LFS upload, or the Backblaze B2 connections already in Smartbase); this is intentionally not used here for large files. `FILE_QUOTA_BYTES` (default 500 MB) sets the per-account quota.
+Hugging Face only accepts small files in a normal commit, so Smartbase stores a file as base64 text: files up to 5 MB are one document, and larger files (up to 50 MB) are stored in 5 MB parts (`users/<id>/files/<name>/part-0000.json` ...). The dashboard splits and uploads parts for you with a progress bar; API users send the parts themselves (`PUT /files/NAME/parts/INDEX?total=N&size=SIZE`, then `POST /files/NAME/complete`).
+
+Each stored part is a separate Hugging Face commit, so a 50 MB file uses 11 commits. Workers also need enough CPU time for the base64 work (the **Workers Paid** plan is recommended for large files).
+
+**Your own Backblaze B2 bucket.** Under External Storage → File Storage an account can send all new files straight to its own bucket (no 1 GB limit, not counted in the free storage). The browser uploads directly to the bucket with a signed link, so the bucket needs a CORS rule for `https://smartbase.de5.net` (operations `s3_put, s3_get, s3_head`, headers `*`). "Test direct upload" checks it. `FILE_QUOTA_BYTES` changes the 1 GB quota.
+
+**Database bindings** now do real work: "Test connection" writes, finds and deletes a test object in the bucket, "Back up now" saves every table and record of the database into `databases/<id>/backups/` in the bucket, and the backups can be listed and downloaded.
 
 ### SQL engine notes (tastdone merge)
 - `server/sql/engine.js` is the pure-JS engine; `server/sql/executor.js` bridges it to the existing Hugging Face layout (`tables.json`, table `metadata.json`, `records.json`), so dashboard tables, the Data Browser and the REST record endpoints keep working on the same data.

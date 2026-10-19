@@ -46,7 +46,7 @@ export class HuggingFaceClient {
     if (!pathMod) return `./data/hf-mock/${hfPath}`;
     return pathMod.join(this.localPath, hfPath);
   }
-  async writeFile(hfPath, data) {
+  async writeFile(hfPath, data, opts = {}) {
     const jsonStr = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
     if (this.useMock) {
       if (this.isProduction && !this.allowMock) {
@@ -66,7 +66,7 @@ export class HuggingFaceClient {
     }
     try {
       await this.commitHF(hfPath, jsonStr, 'create');
-      this.cache.set(hfPath, { data: typeof data === 'string' ? JSON.parse(data) : data, ts: Date.now() });
+      if (opts.cache !== false) this.cache.set(hfPath, { data: typeof data === 'string' ? JSON.parse(data) : data, ts: Date.now() });
       return { success: true, path: hfPath, mode: 'live' };
     } catch (e) {
       if (this.isProduction) {
@@ -124,8 +124,9 @@ export class HuggingFaceClient {
     }
     return { success: true };
   }
-  async readFile(hfPath) {
-    const cached = this.cache.get(hfPath);
+  async readFile(hfPath, opts = {}) {
+    const useCache = opts.cache !== false; // large file parts are read without caching
+    const cached = useCache ? this.cache.get(hfPath) : null;
     if (cached && Date.now() - cached.ts < this.cacheTTL) return cached.data;
     if (this.useMock) {
       if (this.isProduction && !this.allowMock) return null;
@@ -134,7 +135,7 @@ export class HuggingFaceClient {
         const localPath = this.getLocalPath(hfPath);
         const content = await fsPromises.readFile(localPath, 'utf-8');
         const data = JSON.parse(content);
-        this.cache.set(hfPath, { data, ts: Date.now() });
+        if (useCache) this.cache.set(hfPath, { data, ts: Date.now() });
         return data;
       } catch (e) {
         if (e.code === 'ENOENT') return null;
@@ -168,7 +169,7 @@ export class HuggingFaceClient {
       const text = await response.text();
       try {
         const data = JSON.parse(text);
-        this.cache.set(hfPath, { data, ts: Date.now() });
+        if (useCache) this.cache.set(hfPath, { data, ts: Date.now() });
         return data;
       } catch (e) {
         throw storageError('STORAGE_READ_FAILED', `invalid JSON for ${hfPath}: ${e.message}`);
@@ -200,6 +201,20 @@ export class HuggingFaceClient {
       if (this.isProduction) throw storageError('STORAGE_DELETE_FAILED', e.message);
       return { success: true, mode: 'mock-fallback-dev' };
     }
+  }
+  // Delete several files in ONE commit (large files are stored as several parts).
+  async deleteMany(paths) {
+    paths = [...new Set(paths)];
+    if (!paths.length) return { success: true };
+    if (this.useMock) { for (const p of paths) await this.deleteFile(p); return { success: true }; }
+    paths.forEach((p) => this.cache.delete(p));
+    const lines = [JSON.stringify({ key: 'header', value: { summary: `delete ${paths.length} files`, description: 'Smartbase delete' } }), ...paths.map((p) => JSON.stringify({ key: 'deletedFile', value: { path: p } }))];
+    let response;
+    try {
+      response = await fetch(`https://huggingface.co/api/datasets/${this.dataset}/commit/main`, { method: 'POST', headers: { 'Authorization': `Bearer ${this.token}`, 'Content-Type': 'application/x-ndjson' }, body: lines.join('\n') + '\n' });
+    } catch (e) { throw storageError('STORAGE_DELETE_FAILED', `commit network error: ${e.message}`); }
+    if (!response.ok && response.status !== 404) throw storageError('STORAGE_DELETE_FAILED', `commit ${response.status}: ${(await response.text().catch(() => '')).substring(0, 300)}`);
+    return { success: true };
   }
   clearCache() { this.cache.clear(); }
 }

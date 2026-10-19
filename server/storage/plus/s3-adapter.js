@@ -71,8 +71,8 @@ export class S3StorageAdapter {
     return { key, url: await getSignedUrl(this.client, command, { expiresIn }) };
   }
 
-  async createDownloadUrl(key, expiresIn = 900) {
-    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
+  async createDownloadUrl(key, expiresIn = 900, filename) {
+    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key, ...(filename ? { ResponseContentDisposition: `attachment; filename="${String(filename).replace(/["\\\r\n]/g, '')}"` } : {}) });
     return { key, url: await getSignedUrl(this.client, command, { expiresIn }) };
   }
 }
