@@ -38,7 +38,8 @@ export async function createApp(env = {}) {
     token: env.HF_TOKEN || '',
     dataset: env.HF_DATASET || '',
     isProduction,
-    allowMock: !isProduction
+    allowMock: !isProduction,
+    secret: env.SMARTBASE_STORAGE_ENCRYPTION_KEY || env.JWT_SECRET || env.SESSION_SECRET || ''
   });
 
   const { createAuthModule } = await import('./auth/auth.js');
@@ -146,14 +147,18 @@ export async function createApp(env = {}) {
       if (!decoded) return res.status(401).json({ success: false, error: 'UNAUTHORIZED' });
       const user = await authModule.getUserById(decoded.id);
       if (!user) return res.status(404).json({ success: false, error: 'USER_NOT_FOUND' });
-      const databases = await storage.getUserDatabases(user.id);
-      let totalTables = 0, totalRecords = 0;
-      for (const db of databases) {
-        const tables = await storage.getDatabaseTables(user.id, db.id);
-        totalTables += tables.length;
-        for (const t of tables) { const recs = await storage.getRecords(user.id, db.id, t.id); totalRecords += recs ? recs.length : 0; }
-      }
-      return res.json({ success: true, user: { ...user, stats: { databases: databases.length, tables: totalTables, records: totalRecords, database_limit: 20, table_limit: 50, total_table_limit: 500, storage_limit_mb: 500, max_file_upload_mb: 25, api_requests_per_day: 2000, api_requests_per_minute: 20, api_keys_limit: 5 } } });
+      // Counting must stay cheap: a few reads, never "every record of every table" (that made sign-in fail for big accounts).
+      let databases = [], totalTables = 0, totalRecords = 0, partial = false, statsFailed = false;
+      try {
+        databases = await storage.getUserDatabases(user.id);
+        let budget = 12; // at most 12 record lists are read for the totals
+        for (const db of databases) {
+          const list = (await storage.hf.readFile(storage.databaseTablesPath(user.id, db.id))) || [];
+          totalTables += list.length;
+          for (const t of list) { if (budget <= 0) { partial = true; break; } budget--; const recs = await storage.getRecords(user.id, db.id, t.id); totalRecords += recs ? recs.length : 0; }
+        }
+      } catch (e) { statsFailed = true; console.error('[auth/me] stats failed:', e.message); }
+      return res.json({ success: true, user: { ...user, stats: { databases: databases.length, tables: totalTables, records: totalRecords, records_partial: partial, stats_failed: statsFailed, database_limit: 20, table_limit: 50, total_table_limit: 500, storage_limit_mb: 500, max_file_upload_mb: 25, api_requests_per_day: 2000, api_requests_per_minute: 20, api_keys_limit: 5 } } });
     } catch (e) {
       return res.status(500).json({ success: false, error: 'FETCH_FAILED', message: e.message });
     }
@@ -171,32 +176,31 @@ export async function createApp(env = {}) {
 
   app.get('/api/v1/admin/overview', authMiddleware, adminGuard, async (req, res) => {
     try {
-      const users = await authModule.loadUsers();
-      const usage = await adminModule.readUsage();
-      const userRows = [];
-      for (const user of Object.values(users)) {
-        const safe = { id: user.id, username: user.username, email: user.email, plan: user.plan, created_at: user.created_at };
-        const databases = await storage.getUserDatabases(user.id);
-        let tables = 0, records = 0;
-        for (const db of databases) {
-          const dbTables = await storage.getDatabaseTables(user.id, db.id);
-          tables += dbTables.length;
-          for (const table of dbTables) records += (await storage.getRecords(user.id, db.id, table.id)).length;
-        }
-        const u = usage.users?.[user.id] || {};
-        userRows.push({
-          ...safe,
-          stats: { databases: databases.length, tables, records },
+      // Everything here comes from a handful of shared files, so it stays fast with any number of users.
+      const users = await authModule.loadUsers(), usage = await adminModule.readUsage(), registry = await storage.loadRegistry();
+      const assign = await storage.hf.assignments();
+      const userRows = Object.values(users).map((user) => {
+        const u = usage.users?.[user.id] || {}, regDbs = registry.users?.[user.id]?.databases;
+        return {
+          id: user.id, username: user.username, email: user.email, plan: user.plan, created_at: user.created_at,
+          is_admin: adminModule.isAdmin(user), dataset: assign.users[user.id] || 'primary',
+          stats: { databases: Array.isArray(regDbs) ? regDbs.length : (user.databases || []).length },
           usage: { requests: u.requests || 0, sessions: u.sessions || 0, first_seen: u.first_seen || user.created_at, last_seen: u.last_seen || null, endpoints: u.endpoints || {} },
           location: u.last_location || null
-        });
-      }
-      userRows.sort((a,b) => String(b.usage.last_seen || b.created_at).localeCompare(String(a.usage.last_seen || a.created_at)));
-      return res.json({ success: true, admin: { username: req.user.username, email: req.user.email }, totals: { users: userRows.length, requests: usage.totals?.requests || 0, sessions: usage.totals?.sessions || 0 }, users: userRows, days: usage.days || {} });
+        };
+      });
+      userRows.sort((a, b) => String(b.usage.last_seen || b.created_at).localeCompare(String(a.usage.last_seen || a.created_at)));
+      const days = Object.entries(usage.days || {}).map(([date, d]) => ({ date, requests: d.requests || 0, active_users: (d.active_users || []).length })).sort((a, b) => b.date.localeCompare(a.date));
+      const signups = {}; userRows.forEach((u) => { const d = String(u.created_at || '').slice(0, 10); if (d) signups[d] = (signups[d] || 0) + 1; });
+      return res.json({ success: true, admin: { username: req.user.username, email: req.user.email }, totals: { users: userRows.length, databases: userRows.reduce((a, u) => a + u.stats.databases, 0), requests: usage.totals?.requests || 0, sessions: usage.totals?.sessions || 0 }, users: userRows, days, signups, datasets: await adminModule.listDatasets() });
     } catch (e) {
       console.error('[admin overview]', e);
       return res.status(500).json({ success: false, error: e.code || 'ADMIN_OVERVIEW_FAILED', message: e.message });
     }
+  });
+  app.get('/api/v1/admin/users/:userId/stats', authMiddleware, adminGuard, async (req, res) => {
+    try { return res.json({ success: true, stats: await adminModule.userStats(req.params.userId) }); }
+    catch (e) { return res.status(500).json({ success: false, error: e.code || 'ADMIN_STATS_FAILED', message: e.message }); }
   });
 
   app.delete('/api/v1/admin/users', authMiddleware, adminGuard, async (req, res) => {
@@ -211,6 +215,7 @@ export async function createApp(env = {}) {
       for (const id of removable) {
         await storage.deleteUser(id);
         await authModule.deleteUserRecord(id);
+        await storage.hf.unassign?.(id);
         deleted++;
       }
       return res.json({ success: true, deleted });
@@ -220,24 +225,13 @@ export async function createApp(env = {}) {
     }
   });
 
-  app.get('/api/v1/admin/datasets', authMiddleware, adminGuard, async (req, res) => {
-    try { return res.json({ success: true, ...await adminModule.listDatasets() }); }
-    catch (e) { return res.status(500).json({ success:false, error:'DATASET_LIST_FAILED', message:e.message }); }
-  });
-
-  app.post('/api/v1/admin/datasets', authMiddleware, adminGuard, async (req, res) => {
-    try {
-      const data = await adminModule.addDataset(String(req.body?.dataset_id || '').trim(), String(req.body?.label || '').trim());
-      return res.status(201).json({ success:true, ...data });
-    } catch (e) {
-      return res.status(e.code === 'INVALID_DATASET' ? 400 : 500).json({ success:false, error:e.code || 'DATASET_ADD_FAILED', message:e.message });
-    }
-  });
-
-  app.delete('/api/v1/admin/datasets/:datasetId', authMiddleware, adminGuard, async (req, res) => {
-    try { return res.json({ success:true, ...await adminModule.removeDataset(req.params.datasetId) }); }
-    catch (e) { return res.status(500).json({ success:false, error:'DATASET_REMOVE_FAILED', message:e.message }); }
-  });
+  const datasetStatus = { INVALID_DATASET: 400, DATASET_EXISTS: 409, DATASET_NOT_FOUND: 404, DATASET_IN_USE: 409, DATASET_UNREACHABLE: 400 };
+  const datasetRoute = (fn) => async (req, res) => { try { return res.json(await fn(req)); } catch (e) { const st = datasetStatus[e.code] || 500; if (st === 500) console.error('[admin datasets]', e); return res.status(st).json({ success: false, error: e.code || 'ADMIN_DATASET_FAILED', message: e.message }); } };
+  app.get('/api/v1/admin/datasets', authMiddleware, adminGuard, datasetRoute(() => adminModule.listDatasets()));
+  app.post('/api/v1/admin/datasets', authMiddleware, adminGuard, datasetRoute((req) => adminModule.addDataset(req.body || {})));
+  app.patch('/api/v1/admin/datasets/:datasetId', authMiddleware, adminGuard, datasetRoute((req) => adminModule.updateDataset(req.params.datasetId, req.body || {})));
+  app.post('/api/v1/admin/datasets/:datasetId/probe', authMiddleware, adminGuard, datasetRoute(async (req) => ({ success: true, ...(await adminModule.probeDataset(req.params.datasetId)) })));
+  app.delete('/api/v1/admin/datasets/:datasetId', authMiddleware, adminGuard, datasetRoute((req) => adminModule.removeDataset(req.params.datasetId)));
 
   app.use('/api/v1', apiRouter);
   app.use('/apiv1', apiKeyRouter);

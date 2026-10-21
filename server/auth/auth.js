@@ -43,6 +43,7 @@ export function createAuthModule({ storage, env = {}, jwtSecret } = {}) {
     const hashed = await bcrypt.hash(password, 12);
     const user = { id, username, email, password: hashed, plan: 'free', created_at: new Date().toISOString(), databases: [] };
     users[id] = user;
+    await storage.hf.assignNewUser?.(id, Object.keys(users).length);
     await saveUsers(users);
     const { password: _, ...safe } = user;
     return safe;
@@ -91,6 +92,7 @@ export function createAuthModule({ storage, env = {}, jwtSecret } = {}) {
       found = { id, username, email: mail, plan: 'free', created_at: now, databases: [], auth_provider: 'google.com', google_sub: gsub, email_verified: true,
         terms_accepted: true, terms_version: termsVersion, terms_accepted_at: now, display_name: name || '', photo_url: picture || '' };
       users[id] = found;
+      await storage.hf.assignNewUser?.(id, Object.keys(users).length);
     } else {
       found.email = mail; found.google_sub = gsub; found.auth_provider = 'google.com'; found.email_verified = true;
       if (name) found.display_name = name;

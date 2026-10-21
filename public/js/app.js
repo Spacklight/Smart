@@ -130,23 +130,27 @@ async function api(path, options = {}) {
 }
 
 async function fetchUser() {
+  let data;
   try {
-    const data = await api('/auth/me');
-    currentUser = data.user;
-    document.body.dataset.authed = 'true';
-    document.getElementById('userDisplay').textContent = `${currentUser.username} • ${currentUser.plan} plan`;
-    document.getElementById('landingPage').classList.add('hidden');
-    document.getElementById('mainApp').classList.remove('hidden');
-    updateLimits();
-    navigate('dashboard');
-    
-    // Check storage mode
-    const health = await fetch('/api/health').then(r=>r.json());
-    document.getElementById('storageMode').textContent = `Cloud: ${health.status === 'ok' ? 'Connected' : 'Unavailable'}`;
+    data = await api('/auth/me');
   } catch (e) {
     console.error('fetchUser failed', e);
-    logout();
+    // Only sign out when the session itself is bad. A temporary server problem must not silently log you out.
+    if (/unauthor|invalid token|token expired|session|user not found|sign in again/i.test(String((e && e.message) || ''))) logout();
+    else showToast('Could not load your account: ' + ((e && e.message) || 'server error') + '. Please refresh the page.', 'error');
+    return;
   }
+  currentUser = data.user;
+  document.body.dataset.authed = 'true';
+  document.getElementById('userDisplay').textContent = `${currentUser.username} • ${currentUser.plan} plan`;
+  document.getElementById('landingPage').classList.add('hidden');
+  document.getElementById('mainApp').classList.remove('hidden');
+  try { updateLimits(); navigate('dashboard'); }
+  catch (e) { console.error('dashboard render failed', e); showToast('Part of the dashboard could not load: ' + e.message, 'error'); }
+  try {
+    const health = await fetch('/api/health').then(r => r.json());
+    document.getElementById('storageMode').textContent = `Cloud: ${health.status === 'ok' ? 'Connected' : 'Unavailable'}`;
+  } catch (e) { /* the status label is optional */ }
 }
 
 function showAuth(mode = 'register') {
@@ -290,7 +294,7 @@ async function renderDashboard() {
       <div class="grid" style="margin-bottom:2rem;">
         <div class="card"><div class="card-header"><span class="card-title">Databases</span><span class="badge">${stats.databases} / 20</span></div><div style="font-size:2rem; font-weight:800;">${stats.databases}</div><div class="progress"><div class="progress-fill" style="width:${(stats.databases/5)*100}%"></div></div></div>
         <div class="card"><div class="card-header"><span class="card-title">Tables</span><span class="badge">${stats.tables} / 500</span></div><div style="font-size:2rem; font-weight:800;">${stats.tables}</div><div class="progress"><div class="progress-fill" style="width:${Math.min(100,(stats.tables/500)*100)}%"></div></div></div>
-        <div class="card"><div class="card-header"><span class="card-title">Records</span><span class="badge badge-success">Live</span></div><div style="font-size:2rem; font-weight:800;">${stats.records}</div><p style="font-size:0.8rem; color: var(--text-secondary); margin-top:0.5rem;">Saved to cloud storage</p></div>
+        <div class="card"><div class="card-header"><span class="card-title">Records</span><span class="badge badge-success">Live</span></div><div style="font-size:2rem; font-weight:800;">${stats.records}${stats.records_partial ? "+" : ""}</div><p style="font-size:0.8rem; color: var(--text-secondary); margin-top:0.5rem;">Saved to cloud storage</p></div>
         <div class="card"><div class="card-header"><span class="card-title">Storage</span><span class="badge badge-success">Cloud</span></div><div style="font-size:0.9rem;">All data is saved to durable cloud storage and survives restarts.</div></div>
       </div>
 

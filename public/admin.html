@@ -3,45 +3,152 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Smartbase Administration</title>
-<link rel="stylesheet" href="/css/style.css">
-<link rel="icon" type="image/svg+xml" href="https://api.iconify.design/mdi/database-cog-outline.svg?color=%2300d4ff">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="robots" content="noindex, nofollow">
+<title>Smartbase - Admin Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-.admin-shell{min-height:100vh;background:var(--bg);padding:1.25rem}.admin-wrap{max-width:1500px;margin:auto}.admin-header{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}.admin-title{font-size:1.5rem;font-weight:800;display:flex;align-items:center;gap:.6rem}.admin-logo-img{width:34px;height:34px}.admin-sub{color:var(--text-secondary);font-size:.85rem}.admin-actions{display:flex;gap:.5rem;flex-wrap:wrap}.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1rem;margin:1rem 0}.stat-number{font-size:2rem;font-weight:900}.danger-zone{border-color:rgba(255,68,68,.45)}.danger-text{color:var(--danger)}.table-container{margin-top:1rem}.small{font-size:.75rem;color:var(--text-muted)}.notice{padding:.85rem 1rem;border:1px solid var(--border);border-radius:10px;background:var(--bg-card);color:var(--text-secondary);font-size:.8rem}.section-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:1.75rem}.dataset-form{display:flex;gap:.5rem;flex-wrap:wrap}.dataset-form input{min-width:240px;flex:1}.user-row-selected{background:rgba(255,68,68,.08)}
+*{font-family:'Inter',sans-serif}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-thumb{background:#1e2a4f;border-radius:10px}
+body{background:#080c1e}
+.card{background:#111832;border:1px solid #1c274e;border-radius:14px}
+.nav a{cursor:pointer}.nav a.active{background:#2a5bff;color:#fff}
+.view{display:none}.view.active{display:block}
+input,select{background:#0e1630;border:1px solid #1e2d5a;border-radius:8px;padding:8px 10px;font-size:12px;outline:none;color:#e2e8f0}
+input:focus,select:focus{border-color:#2a5bff}
+.btn{background:#1a2344;border:1px solid #24325f;border-radius:8px;padding:7px 12px;font-size:11px}.btn:hover{background:#222d58}
+.btn-primary{background:#2a5bff;border-color:#2a5bff;color:#fff}.btn-danger{background:#3b1220;border-color:#7f1d3a;color:#fca5a5}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.chip{padding:2px 8px;border-radius:99px;font-size:10px}.ok{background:#10b98133;color:#34d399}.off{background:#ef444433;color:#f87171}.mute{background:#1e2a52;color:#93a3d1}
+.row-sel{background:#16224a}
+.sidebar-right{display:none}@media (min-width:1280px){.sidebar-right{display:block}}
+@media (max-width:900px){aside.left{display:none}.main-wrap{margin-left:0!important}}
 </style>
-<link rel="stylesheet" href="/css/external-storage.css">
 </head>
-<body>
-<div class="admin-shell"><div class="admin-wrap">
-  <div class="admin-header">
-    <div><div class="admin-title"><img class="admin-logo-img" src="https://api.iconify.design/mdi/database-cog-outline.svg?color=%2300d4ff" alt="Smartbase"> Smartbase Administration</div><div class="admin-sub" id="adminIdentity">Checking administrator access…</div></div>
-    <div class="admin-actions"><button class="btn" onclick="loadAdmin()">↻ Refresh</button><button class="btn" onclick="location.href='/'">← Platform</button></div>
+<body class="text-slate-200 overflow-x-hidden">
+<div class="flex min-h-screen">
+
+<!-- LEFT SIDEBAR -->
+<aside class="left w-[240px] bg-[#0c1126] border-r border-[#1a2444] flex flex-col fixed h-screen z-20">
+ <div class="p-4 flex items-center gap-3 border-b border-[#1a2444]">
+  <div class="w-8 h-8 bg-[#2a5bff] rounded-lg flex items-center justify-center"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.5L19.5 8 12 11.5 4.5 8 12 4.5z"/></svg></div>
+  <div><div class="font-bold text-[15px] leading-none">Smartbase</div><div class="text-[10px] text-slate-400 tracking-widest">Admin Dashboard</div></div>
+ </div>
+ <nav class="nav flex-1 overflow-y-auto p-3 space-y-5">
+  <div><a data-view="dashboard" class="active flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium"><span>▦</span> Dashboard</a></div>
+  <div>
+   <div class="text-[10px] text-slate-500 font-semibold tracking-widest px-3 mb-2">USER MANAGEMENT</div>
+   <a data-view="users" class="flex items-center justify-between px-3 py-2 text-[13px] text-slate-300 hover:bg-[#151d3a] rounded-lg"><span class="flex gap-3"><span>👤</span> Users</span><span id="navUsers" class="bg-[#1e2a52] text-[10px] px-1.5 py-0.5 rounded-full text-[#5b8def]">–</span></a>
+   <a data-view="activity" class="flex items-center gap-3 px-3 py-2 text-[13px] text-slate-400 hover:bg-[#151d3a] rounded-lg"><span>📊</span> Activity</a>
   </div>
-  <div id="message" class="notice">Loading protected administration data…</div>
-  <div id="adminContent" class="hidden">
-    <div class="stat-grid" id="stats"></div>
-    <div class="notice"><strong>Location information:</strong> the location shown here is an approximate network location supplied by Cloudflare (city/region/country). It is not GPS and the administration panel does not collect exact device coordinates.</div>
-
-    <div class="section-head"><h2>Registered Accounts</h2><div class="admin-actions"><button class="btn danger-text" onclick="deleteSelected()">Delete Selected</button><button class="btn danger-text" onclick="deleteAll()">Delete All Accounts</button></div></div>
-    <div class="table-container"><table class="data-table"><thead><tr><th><input type="checkbox" id="selectAll" onchange="toggleAll(this.checked)"></th><th>Username</th><th>Email</th><th>Created</th><th>Usage</th><th>Last Activity</th><th>Approx. Location</th><th>Data</th></tr></thead><tbody id="usersBody"></tbody></table></div>
-
-    <div class="section-head"><h2>Usage by Day</h2></div>
-    <div class="table-container"><table class="data-table"><thead><tr><th>Date</th><th>Requests</th><th>Active Users</th></tr></thead><tbody id="daysBody"></tbody></table></div>
-
-    <div class="section-head"><h2>Hugging Face Dataset Catalog</h2></div>
-    <div class="card">
-      <p class="admin-sub" style="margin-bottom:1rem">Add dataset repository IDs that you want to keep available to your administration workflow. Example: <span class="mono">owner/dataset-name</span>. Adding an ID does not automatically change the platform's primary storage dataset.</p>
-      <form class="dataset-form" onsubmit="addDataset(event)"><input id="datasetId" class="form-input" placeholder="owner/dataset-name" required><input id="datasetLabel" class="form-input" placeholder="Optional label"><button class="btn btn-primary">Add Dataset</button></form>
-      <div class="table-container"><table class="data-table"><thead><tr><th>Dataset</th><th>Label</th><th>Added</th><th></th></tr></thead><tbody id="datasetsBody"></tbody></table></div>
-    </div>
-
-    <div class="section-head"><h2 class="danger-text">Danger Zone</h2></div>
-    <div class="card danger-zone"><p>Deleting an account permanently removes its Smartbase databases, tables, records, audit data and API-key records from the configured cloud storage, then removes the account record. The administrator account is protected from bulk deletion.</p></div>
+  <div>
+   <div class="text-[10px] text-slate-500 font-semibold tracking-widest px-3 mb-2">STORAGE</div>
+   <a data-view="datasets" class="flex items-center justify-between px-3 py-2 text-[13px] text-slate-300 hover:bg-[#151d3a] rounded-lg"><span class="flex gap-3"><span>🤗</span> Hugging Face Datasets</span><span id="navDatasets" class="bg-[#1e2a52] text-[10px] px-1.5 py-0.5 rounded-full text-[#5b8def]">–</span></a>
   </div>
-</div></div>
-<script src="/js/ui.js"></script>
+  <div>
+   <div class="text-[10px] text-slate-500 font-semibold tracking-widest px-3 mb-2">SYSTEM &amp; SECURITY</div>
+   <a data-view="danger" class="flex items-center gap-3 px-3 py-2 text-[13px] text-slate-400 hover:bg-[#151d3a] rounded-lg"><span>🔒</span> Danger zone</a>
+   <a href="/" class="flex items-center gap-3 px-3 py-2 text-[13px] text-slate-400 hover:bg-[#151d3a] rounded-lg"><span>↗</span> Open Smartbase</a>
+  </div>
+ </nav>
+ <div class="p-3">
+  <div class="bg-[#0f1f15] border border-[#1d3a26] rounded-lg p-3">
+   <div class="flex items-center gap-2 text-[11px] text-emerald-400 font-semibold"><span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span> System Status</div>
+   <div id="statusText" class="text-[10px] text-slate-400 mt-1">Checking…</div>
+  </div>
+  <div class="flex items-center gap-2 mt-4 px-2"><div class="w-6 h-6 bg-[#2a5bff] rounded-full flex items-center justify-center text-[10px]">◧</div><div><div class="text-[12px] font-semibold">Smartbase</div><div class="text-[9px] text-slate-500">by Miyoni</div></div></div>
+ </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main-wrap ml-[240px] flex-1 flex min-w-0">
+<div class="flex-1 min-w-0">
+ <div class="h-[56px] bg-[#0c1126]/80 backdrop-blur border-b border-[#1a2444] flex items-center justify-between px-6 sticky top-0 z-10">
+  <div class="flex items-center gap-2 bg-[#121a35] border border-[#1e2d5a] rounded-full px-4 py-2 w-[360px] max-w-[50vw]">
+   <span class="text-slate-500 text-sm">🔍</span>
+   <input id="search" placeholder="Search users by name, email or dataset" class="!bg-transparent !border-0 !p-0 w-full placeholder:text-slate-500">
+  </div>
+  <div class="flex items-center gap-3">
+   <button class="btn" onclick="loadAll()">↻ Refresh</button>
+   <div class="text-right leading-none"><div id="adminName" class="text-[12px] font-semibold">Admin</div><div id="adminEmail" class="text-[10px] text-slate-400">Administrator</div></div>
+   <div class="w-8 h-8 bg-gradient-to-br from-violet-500 to-blue-500 rounded-full"></div>
+  </div>
+ </div>
+
+ <div id="message" class="m-5 card p-4 text-[12px] text-slate-300">Loading protected administration data…</div>
+
+ <div id="content" class="hidden p-5">
+  <!-- DASHBOARD -->
+  <section id="v-dashboard" class="view active space-y-4">
+   <div class="flex justify-between items-start"><div><h1 class="text-[20px] font-bold">Dashboard</h1><p class="text-[11px] text-slate-400">Overview of your Smartbase platform</p></div><div id="today" class="text-[11px] text-slate-400"></div></div>
+   <div id="stats" class="grid grid-cols-2 xl:grid-cols-4 gap-4"></div>
+   <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+    <div class="card p-4"><div class="text-[13px] font-semibold">New accounts</div><div class="text-[10px] text-slate-500 mb-3">Last 7 days</div><div style="height:150px"><canvas id="growthChart"></canvas></div></div>
+    <div class="card p-4"><div class="text-[13px] font-semibold">API requests</div><div class="text-[10px] text-slate-500 mb-3">Last 14 days</div><div style="height:150px"><canvas id="reqChart"></canvas></div></div>
+    <div class="card p-4"><div class="text-[13px] font-semibold">Accounts per dataset</div><div class="text-[10px] text-slate-500 mb-3">Where new data is stored</div><div class="flex items-center gap-4"><div style="width:120px;height:120px"><canvas id="dsChart"></canvas></div><div id="dsLegend" class="text-[11px] space-y-2 min-w-0"></div></div></div>
+   </div>
+   <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+    <div class="xl:col-span-2 card p-4"><div class="flex justify-between mb-3"><div class="text-[13px] font-semibold">Recent users</div><a class="text-[11px] text-[#5b8def] cursor-pointer" onclick="show('users')">View all</a></div><div class="overflow-x-auto"><table class="w-full text-[11px]"><thead class="text-slate-500 text-[10px]"><tr><th class="text-left font-normal pb-2">Name / Email</th><th class="text-left font-normal">Plan</th><th class="text-left font-normal">Databases</th><th class="text-left font-normal">Joined</th><th class="text-left font-normal">Dataset</th></tr></thead><tbody id="recentUsers"></tbody></table></div></div>
+    <div class="card p-4"><div class="text-[13px] font-semibold mb-3">Quick actions</div><div class="grid grid-cols-2 gap-2"><button class="btn btn-primary" onclick="show('datasets')">+ Add dataset</button><button class="btn" onclick="show('users')">Manage users</button><button class="btn" onclick="show('activity')">View activity</button><button class="btn" onclick="loadAll()">↻ Refresh data</button></div><div class="text-[10px] text-slate-500 mt-4">Accounts, API keys and admin data always stay on the primary dataset. Only each user's own databases and files move to other datasets.</div></div>
+   </div>
+  </section>
+
+  <!-- USERS -->
+  <section id="v-users" class="view space-y-4">
+   <div class="flex flex-wrap justify-between items-center gap-2"><div><h1 class="text-[20px] font-bold">Users</h1><p id="usersSub" class="text-[11px] text-slate-400"></p></div>
+    <div class="flex gap-2"><button class="btn btn-danger" id="delSel" onclick="deleteSelected()" disabled>Delete selected</button></div></div>
+   <div class="card p-4 overflow-x-auto"><table class="w-full text-[11px]"><thead class="text-slate-500 text-[10px]"><tr><th class="text-left font-normal pb-2 w-6"><input type="checkbox" id="selAll" onchange="toggleAll(this.checked)"></th><th class="text-left font-normal">User</th><th class="text-left font-normal">Plan</th><th class="text-left font-normal">Dataset</th><th class="text-left font-normal">Databases</th><th class="text-left font-normal">Requests</th><th class="text-left font-normal">Sessions</th><th class="text-left font-normal">Last seen</th><th class="text-left font-normal">Location</th><th class="text-left font-normal"></th></tr></thead><tbody id="userRows"></tbody></table></div>
+  </section>
+
+  <!-- ACTIVITY -->
+  <section id="v-activity" class="view space-y-4">
+   <div><h1 class="text-[20px] font-bold">Activity</h1><p class="text-[11px] text-slate-400">API use by day and by endpoint</p></div>
+   <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+    <div class="card p-4"><div class="text-[13px] font-semibold mb-3">By day</div><table class="w-full text-[11px]"><thead class="text-slate-500 text-[10px]"><tr><th class="text-left font-normal pb-2">Date</th><th class="text-left font-normal">Requests</th><th class="text-left font-normal">Active users</th></tr></thead><tbody id="dayRows"></tbody></table></div>
+    <div class="card p-4"><div class="text-[13px] font-semibold mb-3">Top endpoints</div><table class="w-full text-[11px]"><thead class="text-slate-500 text-[10px]"><tr><th class="text-left font-normal pb-2">Endpoint</th><th class="text-left font-normal">Requests</th></tr></thead><tbody id="epRows"></tbody></table></div>
+   </div>
+  </section>
+
+  <!-- DATASETS -->
+  <section id="v-datasets" class="view space-y-4">
+   <div><h1 class="text-[20px] font-bold">Hugging Face datasets</h1><p class="text-[11px] text-slate-400">Add datasets to store more user data. New accounts go to the dataset that accepts new users and has the fewest accounts.</p></div>
+   <div id="dsList" class="space-y-3"></div>
+   <div class="card p-4">
+    <div class="text-[13px] font-semibold mb-1">Add a dataset</div>
+    <div class="text-[10px] text-slate-500 mb-3">Create an empty <b>private</b> dataset on Hugging Face first. Leave the token empty if the Smartbase token already has write access to it; otherwise paste a token that does (it is stored encrypted and never shown again). Smartbase tests a write before adding it.</div>
+    <form id="addDs" class="grid grid-cols-1 md:grid-cols-6 gap-2 items-end">
+     <label class="md:col-span-2 text-[10px] text-slate-400">Dataset<input id="dsId" class="w-full mt-1" placeholder="owner/name" required></label>
+     <label class="text-[10px] text-slate-400">Label<input id="dsLabel" class="w-full mt-1" placeholder="Optional"></label>
+     <label class="text-[10px] text-slate-400">Soft limit (GB)<input id="dsCap" type="number" min="1" value="100" class="w-full mt-1"></label>
+     <label class="text-[10px] text-slate-400">Token (optional)<input id="dsToken" type="password" autocomplete="off" class="w-full mt-1" placeholder="hf_…"></label>
+     <button class="btn btn-primary h-[34px]" id="dsAddBtn">Test &amp; add</button>
+     <label class="md:col-span-6 text-[11px] text-slate-300 flex items-center gap-2"><input id="dsAccept" type="checkbox" class="!p-0"> Accept new accounts right away</label>
+    </form>
+    <div id="dsMsg" class="text-[11px] mt-3"></div>
+   </div>
+  </section>
+
+  <!-- DANGER -->
+  <section id="v-danger" class="view space-y-4">
+   <div><h1 class="text-[20px] font-bold text-red-300">Danger zone</h1><p class="text-[11px] text-slate-400">These actions cannot be undone.</p></div>
+   <div class="card p-4 border-red-900/60"><div class="text-[13px] font-semibold">Delete all users</div><div class="text-[11px] text-slate-400 my-2">Deletes every account except yours, with all their databases, files and records.</div><button class="btn btn-danger" onclick="deleteAll()">Delete all users except me</button></div>
+  </section>
+ </div>
+</div>
+
+<!-- RIGHT SIDEBAR -->
+<aside class="sidebar-right w-[300px] bg-[#0c1126] border-l border-[#1a2444] p-3 space-y-4">
+ <div class="card p-4"><div class="text-[13px] font-semibold mb-3">Recent activity</div><div id="recentAct" class="space-y-3"></div></div>
+ <div class="card p-4"><div class="text-[13px] font-semibold mb-3">Notifications</div><div id="notes" class="space-y-3"></div></div>
+ <div class="card p-4"><div class="text-[13px] font-semibold mb-3">Platform limits / free plan</div><div class="text-[11px] text-slate-300 space-y-1.5"><div class="flex justify-between"><span>Databases</span><span>20 per user</span></div><div class="flex justify-between"><span>Tables</span><span>50 per database</span></div><div class="flex justify-between"><span>File storage</span><span>1 GB per user</span></div><div class="flex justify-between"><span>File size</span><span>50 MB</span></div><div class="flex justify-between"><span>API requests</span><span>20/min · 2,000/day</span></div></div></div>
+</aside>
+</div>
+</div>
+
+<!-- confirm dialog -->
+<div id="dlg" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"><div class="card p-5 max-w-sm w-full"><div id="dlgTitle" class="font-semibold text-[14px] mb-1"></div><div id="dlgBody" class="text-[12px] text-slate-300 mb-4"></div><div class="flex justify-end gap-2"><button class="btn" id="dlgNo">Cancel</button><button class="btn btn-danger" id="dlgYes">Confirm</button></div></div></div>
 <script src="/js/admin.js"></script>
-<script src="/js/external-storage.js" defer></script>
 </body>
 </html>

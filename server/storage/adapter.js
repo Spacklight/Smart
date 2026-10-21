@@ -1,7 +1,9 @@
 import { createHFClient } from './huggingface/client.js';
+import { DatasetRouter } from './huggingface/router.js';
 export class StorageAdapter {
   constructor(config = {}) {
-    this.hf = createHFClient(config);
+    // The router sends each user's data to the dataset the administrator assigned them to (default: the primary dataset).
+    this.hf = new DatasetRouter(createHFClient(config), config);
     this.config = config;
   }
   getMode() { return this.hf.getMode(); }
